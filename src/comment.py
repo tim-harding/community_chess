@@ -22,7 +22,7 @@ def move_from_comment(board: chess.Board, comment: str) -> chess.Move:
             return MoveErrorReason.INVALID
 
 
-def basic_comment_test():
+def _basic_comment_test():
     comment = "e4\nI think this move is good :)"
     board = chess.Board()
     actual = move_from_comment(board, comment)
@@ -30,7 +30,7 @@ def basic_comment_test():
     assert actual == expected
 
 
-def ambiguous_move_test():
+def _ambiguous_move_test():
     board = chess.Board()
     moves = [
         "Nc3",
@@ -47,7 +47,7 @@ def ambiguous_move_test():
     assert actual == MoveErrorReason.AMBIGUOUS
 
 
-def straight_up_illegal_test():
+def _straight_up_illegal_test():
     board = chess.Board()
     comment = "Nc4"
     actual = move_from_comment(board, comment)
@@ -55,6 +55,6 @@ def straight_up_illegal_test():
 
 
 if __name__ == "__main__":
-    basic_comment_test()
-    ambiguous_move_test()
-    straight_up_illegal_test()
+    _basic_comment_test()
+    _ambiguous_move_test()
+    _straight_up_illegal_test()
