@@ -1,5 +1,6 @@
 import os
 import praw
+import praw.models
 
 
 def main():
@@ -14,7 +15,8 @@ def main():
         username=username,
     )
     subreddit = reddit.subreddit("CommunityChess")
-    subreddit.submit("Test", selftext="Self text")
+    for comment in subreddit.stream.comments():
+        print(comment.body)
 
 
 if __name__ == "__main__":
