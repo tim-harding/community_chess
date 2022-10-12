@@ -1,0 +1,34 @@
+{
+    "games": [
+      {
+        "gameNum": 27,
+        "matchStartURL": "foo",
+        "matchConcludeURL": "bar",
+        "moves": [
+          {
+            "notation": "ke7",
+            "user": "someguy",
+            "moveURL": "foo"
+          }
+        ]
+      },
+      {
+        "gameNum": 28,
+        "matchStartURL": "foo",
+        "matchConcludeURL": "bar",
+        "moves": [
+          {
+            "notation": "b2b3",
+            "user": "someguy",
+            "moveURL": "123"
+          },
+          {
+            "notation": "b7b6",
+            "user": "someguy",
+            "moveURL": "456"
+          }
+        ]
+      }
+    ]
+  }
+  
