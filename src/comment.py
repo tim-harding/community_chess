@@ -8,9 +8,11 @@ _MoveErrorReason = enum.Enum("MoveErrorReason", "AMBIGUOUS ILLEGAL INVALID")
 
 
 class Comment:
-    def __init__(self, text: str, upvotes: int):
+    def __init__(self, text: str, upvotes: int, id: str):
         self.text = text
         self.upvotes = upvotes
+        self.ID = id
+        
 
     def move(self, board: chess.Board) -> chess.Move:
         candidate = self.text.split(None, maxsplit=1)[0]
@@ -26,9 +28,13 @@ class Comment:
             else:
                 return _MoveErrorReason.INVALID
 
+    #given a board state, create a response for the redditor who made the comment
+    def formulateResponse(self, board: chess.Board) -> str:
+        return 'foo'
+
 
 def _basic_comment_test():
-    comment = Comment("e4\nI think this move is good :)", 1)
+    comment = Comment("e4\nI think this move is good :)", 1, "foo")
     board = chess.Board()
     actual = comment.move(board)
     expected = chess.Move(chess.E2, chess.E4)
@@ -47,14 +53,14 @@ def _ambiguous_move_test():
     ]
     for move in moves:
         board.push_san(move)
-    comment = Comment("Ng5 is a good one!", 1)
+    comment = Comment("Ng5 is a good one!", 1, "foo")
     actual = comment.move(board)
     assert actual == _MoveErrorReason.AMBIGUOUS
 
 
 def _illegal_move_test():
     board = chess.Board()
-    comment = Comment("Nc4", 1)
+    comment = Comment("Nc4", 1, "foo")
     actual = comment.move(board)
     assert actual == _MoveErrorReason.ILLEGAL
 

@@ -4,9 +4,11 @@ import praw.models
 
 def main():
     reddit = praw.Reddit("bot1", config_interpolation="basic")
-    subreddit = reddit.subreddit("CommunityChess")
-    for comment in subreddit.stream.comments():
-        print(comment.body)
+    submission = reddit.submission("xlm3zg")
+    submission.comments.replace_more(limit=0) #prevents needing to load more comments
+    for top_level_comment in submission.comments:
+        print(top_level_comment.body)
+        print(top_level_comment.author)
     print(reddit.user.me())
 
 

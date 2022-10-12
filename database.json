@@ -2,30 +2,30 @@
     "games": [
       {
         "gameNum": 27,
-        "matchStartURL": "foo",
-        "matchConcludeURL": "bar",
+        "matchStartID": "foo",
+        "matchConcludeID": "bar",
         "moves": [
           {
             "notation": "ke7",
             "user": "someguy",
-            "moveURL": "foo"
+            "postSubmissionID": "xlm3zg"
           }
         ]
       },
       {
         "gameNum": 28,
-        "matchStartURL": "foo",
-        "matchConcludeURL": "bar",
+        "matchStartID": "foo",
+        "matchConcludeID": "bar",
         "moves": [
           {
             "notation": "b2b3",
             "user": "someguy",
-            "moveURL": "123"
+            "postSubmissionID": "xlm3zg"
           },
           {
             "notation": "b7b6",
             "user": "someguy",
-            "moveURL": "456"
+            "postSubmissionID": "xlm3zg"
           }
         ]
       }
