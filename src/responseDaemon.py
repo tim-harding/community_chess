@@ -5,6 +5,10 @@ import time
 import game
 import comment
 
+#An instance of the Daemon class will run perpetually, monitoring the most recent post stored in the DB for new top level comments
+#and then respond to them intelligently
+#All Chess logic is outsourced to game.py and comment.py
+#With the current implementation, a new daemon will need to be spawned every time AFTER a new post has been made and logged in the DB
 class Daemon:
     def __init__(self, jsonPath: str):
         postSubmissionID, self.game = self.from_json(jsonPath)
@@ -67,7 +71,7 @@ class Daemon:
 if __name__ == "__main__":
     daemon = Daemon('../database.json')
     print(daemon.game.board)
-    print(daemon.currentSubmission)
+    print("ID of post selected for monitoring:",daemon.currentSubmission)
 
     while(True):
         Acomment = daemon.findComment()
@@ -78,4 +82,4 @@ if __name__ == "__main__":
                 daemon.reddit.comment(Acomment.ID).reply(body = response)
             except:
                 print('Failure to respond to comment with ID:', Acomment.ID)
-        time.sleep(10)
+        time.sleep(10) #will need to be lowered if project grows in popularity
