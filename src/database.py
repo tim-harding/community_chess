@@ -21,6 +21,16 @@ def current_game() -> int:
     return id
 
 
+def moves():
+    out = []
+    for row in _db.execute(
+        "SELECT san FROM move WHERE game = (SELECT MAX(id) FROM game)"
+    ):
+        (san,) = row
+        out.append(san)
+    return out
+
+
 def prepare():
     _db.execute(
         """
