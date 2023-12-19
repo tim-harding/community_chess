@@ -19,13 +19,13 @@ class Game:
 
 if __name__ == "__main__":
     moves = [
-        'e2e4',
-        'e7e5',
-        'd1h5',
-        'b8c6',
-        'f1c4',
-        'g8f6',
-        'h5f7',
+        "e2e4",
+        "e7e5",
+        "d1h5",
+        "b8c6",
+        "f1c4",
+        "g8f6",
+        "h5f7",
     ]
     game = Game(moves)
     game.render()

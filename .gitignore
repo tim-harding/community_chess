@@ -2,4 +2,5 @@
 .venv
 generated
 praw.ini
-.pyc
+*.pyc
+*.db
