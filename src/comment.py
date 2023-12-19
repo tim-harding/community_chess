@@ -4,39 +4,33 @@ import enum
 
 
 _MOVE_ERROR_REGEX = re.compile("^(ambiguous|illegal|invalid) san: .*")
-_MoveErrorReason = enum.Enum("MoveErrorReason", "AMBIGUOUS ILLEGAL INVALID")
 
 
-class Comment:
-    def __init__(self, text: str, upvotes: int, id: str):
-        self.text = text
-        self.upvotes = upvotes
-        self.ID = id
-        
+class MoveErrorReason(enum.Enum):
+    AMBIGUOUS = 1
+    ILLEGAL = 2
+    INVALID = 3
 
-    def move(self, board: chess.Board) -> chess.Move:
-        candidate = self.text.split(None, maxsplit=1)[0]
-        try:
-            return board.parse_san(candidate)
-        except ValueError as e:
-            match = _MOVE_ERROR_REGEX.match(str(e))
-            reason = match.group(1)
-            if reason == "ambiguous":
-                return _MoveErrorReason.AMBIGUOUS
-            elif reason == "illegal":
-                return _MoveErrorReason.ILLEGAL
-            else:
-                return _MoveErrorReason.INVALID
 
-    #given a board state, create a response for the redditor who made the comment
-    def formulateResponse(self, board: chess.Board) -> str:
-        return 'foo'
+def move_for_comment(board: chess.Board, text) -> chess.Move | MoveErrorReason:
+    candidate = text.split(None, maxsplit=1)[0]
+    try:
+        return board.parse_san(candidate)
+    except ValueError as e:
+        match = _MOVE_ERROR_REGEX.match(str(e))
+        assert match is not None
+        reason = match.group(1)
+        if reason == "ambiguous":
+            return MoveErrorReason.AMBIGUOUS
+        elif reason == "illegal":
+            return MoveErrorReason.ILLEGAL
+        else:
+            return MoveErrorReason.INVALID
 
 
 def _basic_comment_test():
-    comment = Comment("e4\nI think this move is good :)", 1, "foo")
     board = chess.Board()
-    actual = comment.move(board)
+    actual = move_for_comment(board, "e4\nI think this move is good :)")
     expected = chess.Move(chess.E2, chess.E4)
     assert actual == expected
 
@@ -53,16 +47,14 @@ def _ambiguous_move_test():
     ]
     for move in moves:
         board.push_san(move)
-    comment = Comment("Ng5 is a good one!", 1, "foo")
-    actual = comment.move(board)
-    assert actual == _MoveErrorReason.AMBIGUOUS
+    actual = move_for_comment(board, "Ng5 is a good one!")
+    assert actual == MoveErrorReason.AMBIGUOUS
 
 
 def _illegal_move_test():
     board = chess.Board()
-    comment = Comment("Nc4", 1, "foo")
-    actual = comment.move(board)
-    assert actual == _MoveErrorReason.ILLEGAL
+    actual = move_for_comment(board, "Nc4")
+    assert actual == MoveErrorReason.ILLEGAL
 
 
 if __name__ == "__main__":
