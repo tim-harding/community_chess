@@ -4,7 +4,7 @@ import cairosvg
 import chess
 import praw
 import praw.models
-from comment import move_for_comment
+from comment import BadMove, move_for_comment
 import database
 
 reddit = praw.Reddit()
@@ -18,11 +18,25 @@ def main():
 
 def play_move():
     post = reddit.submission(database.last_post())
-    post.comment_sort = "top"
     board = current_board()
+    top_score = 0
+    selected = None
     for comment in post.comments:
         move = move_for_comment(board, comment.body)
-        print(move)
+        match move:
+            case BadMove.AMBIGUOUS:
+                pass
+            case BadMove.ILLEGAL:
+                pass
+            case BadMove.INVALID:
+                pass
+            case BadMove.UNKNOWN:
+                pass
+            case move:
+                if comment.score > top_score:
+                    selected = move
+                    top_score = comment.score
+    print(f"Selected {selected}")
 
 
 def current_board() -> chess.Board:

@@ -6,33 +6,38 @@ import enum
 _MOVE_ERROR_REGEX = re.compile("^(ambiguous|illegal|invalid) san: .*")
 
 
-class MoveErrorReason(enum.Enum):
+class BadMove(enum.Enum):
     AMBIGUOUS = 1
     ILLEGAL = 2
     INVALID = 3
+    UNKNOWN = 4
 
 
-def move_for_comment(board: chess.Board, text) -> chess.Move | MoveErrorReason:
-    candidate = text.split(None, maxsplit=1)[0]
+def move_for_comment(board: chess.Board, comment: str) -> str | BadMove:
+    candidate = comment.split(None, maxsplit=1)[0]
     try:
-        return board.parse_san(candidate)
+        board.parse_san(candidate)
     except ValueError as e:
-        match = _MOVE_ERROR_REGEX.match(str(e))
-        assert match is not None
-        reason = match.group(1)
-        if reason == "ambiguous":
-            return MoveErrorReason.AMBIGUOUS
-        elif reason == "illegal":
-            return MoveErrorReason.ILLEGAL
-        else:
-            return MoveErrorReason.INVALID
+        match _MOVE_ERROR_REGEX.match(str(e)):
+            case None:
+                return BadMove.UNKNOWN
+            case other:
+                match other.group(1):
+                    case "ambiguous":
+                        return BadMove.AMBIGUOUS
+                    case "illegal":
+                        return BadMove.ILLEGAL
+                    case "invalid":
+                        return BadMove.INVALID
+                    case _:
+                        return BadMove.UNKNOWN
+    return candidate
 
 
 def _basic_comment_test():
     board = chess.Board()
     actual = move_for_comment(board, "e4\nI think this move is good :)")
-    expected = chess.Move(chess.E2, chess.E4)
-    assert actual == expected
+    assert actual == "e4"
 
 
 def _ambiguous_move_test():
@@ -48,13 +53,13 @@ def _ambiguous_move_test():
     for move in moves:
         board.push_san(move)
     actual = move_for_comment(board, "Ng5 is a good one!")
-    assert actual == MoveErrorReason.AMBIGUOUS
+    assert actual == BadMove.AMBIGUOUS
 
 
 def _illegal_move_test():
     board = chess.Board()
     actual = move_for_comment(board, "Nc4")
-    assert actual == MoveErrorReason.ILLEGAL
+    assert actual == BadMove.ILLEGAL
 
 
 if __name__ == "__main__":
