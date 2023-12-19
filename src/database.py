@@ -1,11 +1,6 @@
 import sqlite3
 
 
-def insert_post(url: str):
-    _db.execute("INSERT INTO post(url, game) VALUES (?, ?)", (url, current_game()))
-    _db.commit()
-
-
 def insert_move(san: str):
     _db.execute("INSERT INTO move(san, game) VALUES (?, ?)", (san, current_game()))
     _db.commit()
@@ -17,6 +12,17 @@ def insert_game():
 
 def current_game() -> int:
     res = _db.execute("SELECT MAX(id) FROM game")
+    (id,) = res.fetchone()
+    return id
+
+
+def insert_post(reddit_id: str, game: int):
+    _db.execute("INSERT INTO post (reddit_id, game) VALUES (?, ?)", (reddit_id, game))
+    _db.commit()
+
+
+def last_post() -> str:
+    res = _db.execute("SELECT reddit_id FROM post ORDER BY id DESC LIMIT 1")
     (id,) = res.fetchone()
     return id
 
@@ -53,7 +59,7 @@ def prepare():
         """
         CREATE TABLE IF NOT EXISTS post(
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-            url TEXT NOT NULL,
+            reddit_id TEXT NOT NULL,
             game INTEGER NOT NULL,
             FOREIGN KEY(game) REFERENCES game(id)
         )

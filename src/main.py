@@ -13,7 +13,7 @@ def main():
     database.insert_move("f3")
     database.insert_move("e5")
     database.insert_move("g4")
-    # database.insert_move("Qh4")
+    database.insert_move("Qh4")
     # database.insert_move("d4")
     # database.insert_move("f6")
     # database.insert_move("e4")
@@ -42,7 +42,8 @@ def make_post():
 
     reddit = praw.Reddit()
     sub = reddit.subreddit("communitychess")
-    sub.submit_image(title, path)
+    post = sub.submit_image(title, path)
+    database.insert_post(post.id, database.current_game())
 
 
 if __name__ == "__main__":
