@@ -1,8 +1,10 @@
+import argparse
 import tempfile
 import asyncio
 from asyncio import Queue
 from typing import assert_never
 from asyncpraw.reddit import Submission
+from asyncprawcore import logging
 from chess import AmbiguousMoveError, Board, IllegalMoveError, InvalidMoveError
 import chess.svg
 import cairosvg
@@ -20,24 +22,36 @@ MsgQueue = Queue[Comment | NotifyPlayMove]
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(prog="CommunityChess Server")
+    parser.add_argument(
+        "-l",
+        "--log",
+        choices=["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"],
+        default="WARN",
+        help="Sets the logging verbosity level",
+    )
+    args = parser.parse_args()
+    logging.basicConfig(level=args.log)
     # TODO: Guarantee a game and post in the database
     database.prepare()
     asyncio.run(async_main())
 
 
 async def async_main() -> None:
+    logging.info("Entering async_main")
     reddit = Reddit()
     queue: MsgQueue = Queue()
     tasks = [
-        send_play_move_notifications(queue),
-        forward_comments(reddit, queue),
-        handle_messages(reddit, queue),
+        asyncio.create_task(send_play_move_notifications(queue)),
+        asyncio.create_task(forward_comments(reddit, queue)),
+        asyncio.create_task(handle_messages(reddit, queue)),
     ]
-    for task in map(lambda task: asyncio.create_task(task), tasks):
+    for task in tasks:
         await task
 
 
 async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
+    logging.info("entered handle_messages")
     current_post = await reddit.submission(database.last_post())
     board = Board()
     for move in database.moves():
@@ -45,6 +59,7 @@ async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
 
     while True:
         msg = await queue.get()
+        logging.info(f"Got message {msg}")
         match msg:
             case NotifyPlayMove():
                 match await play_move(reddit, board, current_post):
@@ -53,11 +68,29 @@ async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
                     case Submission() as post:
                         current_post = post
             case Comment() as comment:
-                response = response_for_comment(comment.body, board)
-                await comment.reply(response)
+                reply = reply_for_comment(comment.body, board)
+                await comment.reply(reply)
+                logging.info(f"Responded to comment '{comment.body}' with '{reply}'")
 
 
-def response_for_comment(comment: str, board: Board) -> str:
+async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
+    logging.info("entered forward_comments")
+    sub = await reddit.subreddit("communitychess")
+    async for comment in sub.stream.comments():
+        logging.info("Sending comment")
+        await queue.put(comment)
+
+
+async def send_play_move_notifications(queue: MsgQueue) -> None:
+    logging.info("entered send_play_move_notifications")
+    while True:
+        # TODO: Play move at specific times
+        await asyncio.sleep(60)
+        logging.info("Sending play move notification")
+        await queue.put(NotifyPlayMove())
+
+
+def reply_for_comment(comment: str, board: Board) -> str:
     res = move_for_comment(comment, board)
     match res:
         case str() as move:
@@ -68,23 +101,11 @@ def response_for_comment(comment: str, board: Board) -> str:
             assert_never(res)
 
 
-async def send_play_move_notifications(queue: MsgQueue) -> None:
-    while True:
-        # TODO: Play move at specific times
-        await asyncio.sleep(60)
-        await queue.put(NotifyPlayMove())
-
-
-async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
-    sub = await reddit.subreddit("communitychess")
-    async for comment in sub.stream.comments():
-        await queue.put(comment)
-
-
 async def play_move(
     reddit: Reddit, board: Board, post: Submission
 ) -> Submission | None:
-    res = await select_move(board, post)
+    res = select_move(board, post)
+    logging.info(f"Playing move {res}")
     match res:
         case None:
             return None
@@ -92,29 +113,29 @@ async def play_move(
             database.insert_move(move)
             board.push_san(move)
             if board.result() != "*":
-                await make_post(board, reddit)
+                await make_post(reddit, board)
                 database.insert_game()
                 board.reset()
-            return await make_post(board, reddit)
+            return await make_post(reddit, board)
         case _:
             assert_never(res)
 
 
-async def select_move(board: Board, post: Submission) -> str | None:
+def select_move(board: Board, post: Submission) -> str | None:
     top_score = 0
     selected = None
     for comment in post.comments:
-        match move_for_comment(comment.body, board):
-            case str() as move:
-                if comment.score > top_score:
+        if comment.score > top_score:
+            match move_for_comment(comment.body, board):
+                case str() as move:
                     selected = move
                     top_score = comment.score
-            case _:
-                pass
+                case _:
+                    pass
     return selected
 
 
-async def make_post(board: Board, reddit: Reddit) -> Submission:
+async def make_post(reddit: Reddit, board: Board) -> Submission:
     _, path = tempfile.mkstemp(".png")
     svg = chess.svg.board(board, size=1024)
     cairosvg.svg2png(svg, write_to=path)
