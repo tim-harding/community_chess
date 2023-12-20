@@ -1,92 +1,160 @@
 import tempfile
-import sys
+import asyncio
+from asyncio import Queue
+from typing import assert_never
+from asyncpraw.reddit import Submission
+from chess import AmbiguousMoveError, Board, IllegalMoveError, InvalidMoveError
 import chess.svg
 import cairosvg
 import chess
-import asyncpraw
-import asyncpraw.models
-from praw.reddit import asyncio
-from comment import BadMove, move_for_comment
+from asyncpraw import Reddit
+from asyncpraw.models import Comment
 import database
 
 
-def main():
+class NotifyPlayMove:
+    pass
+
+
+MsgQueue = Queue[Comment | NotifyPlayMove]
+
+
+def main() -> None:
+    # TODO: Guarantee a game and post in the database
     database.prepare()
     asyncio.run(async_main())
 
 
-async def async_main():
-    reddit = asyncpraw.Reddit()
-    play_moves_regularly_task = asyncio.create_task(play_moves_regularly(reddit))
-    await play_moves_regularly_task
+async def async_main() -> None:
+    reddit = Reddit()
+    queue: MsgQueue = Queue()
+    tasks = [
+        send_play_move_notifications(queue),
+        forward_comments(reddit, queue),
+        handle_messages(reddit, queue),
+    ]
+    for task in map(lambda task: asyncio.create_task(task), tasks):
+        await task
 
 
-async def play_moves_regularly(reddit: asyncpraw.Reddit):
+async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
+    current_post = await reddit.submission(database.last_post())
+    board = Board()
+    for move in database.moves():
+        board.push_san(move)
+
     while True:
-        await play_move(reddit)
+        msg = await queue.get()
+        match msg:
+            case NotifyPlayMove():
+                match await play_move(reddit, board, current_post):
+                    case None:
+                        pass
+                    case Submission() as post:
+                        current_post = post
+            case Comment() as comment:
+                response = response_for_comment(comment.body, board)
+                await comment.reply(response)
+
+
+def response_for_comment(comment: str, board: Board) -> str:
+    res = move_for_comment(comment, board)
+    match res:
+        case str() as move:
+            return f"I found this move in your comment: {move}"
+        case InvalidMoveError() | AmbiguousMoveError() | IllegalMoveError() as e:
+            return str(e)
+        case _:
+            assert_never(res)
+
+
+async def send_play_move_notifications(queue: MsgQueue) -> None:
+    while True:
+        # TODO: Play move at specific times
         await asyncio.sleep(60)
+        await queue.put(NotifyPlayMove())
 
 
-async def play_move(reddit: asyncpraw.Reddit):
-    board = current_board()
-    match await select_move(board, reddit):
+async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
+    sub = await reddit.subreddit("communitychess")
+    async for comment in sub.stream.comments():
+        await queue.put(comment)
+
+
+async def play_move(
+    reddit: Reddit, board: Board, post: Submission
+) -> Submission | None:
+    res = await select_move(board, post)
+    match res:
         case None:
-            print("No move to play", file=sys.stderr)
-        case move:
+            return None
+        case str() as move:
             database.insert_move(move)
             board.push_san(move)
-            await make_post(board, reddit)
             if board.result() != "*":
+                await make_post(board, reddit)
                 database.insert_game()
-                await make_post(chess.Board(), reddit)
+                board.reset()
+            return await make_post(board, reddit)
+        case _:
+            assert_never(res)
 
 
-async def select_move(board: chess.Board, reddit: asyncpraw.Reddit) -> str | None:
-    post = await reddit.submission(database.last_post())
+async def select_move(board: Board, post: Submission) -> str | None:
     top_score = 0
     selected = None
     for comment in post.comments:
-        move = move_for_comment(board, comment.body)
-        match move:
-            case (
-                BadMove.AMBIGUOUS
-                | BadMove.ILLEGAL
-                | BadMove.INVALID
-                | BadMove.UNKNOWN
-            ):
-                pass
-            case move:
+        match move_for_comment(comment.body, board):
+            case str() as move:
                 if comment.score > top_score:
                     selected = move
                     top_score = comment.score
+            case _:
+                pass
     return selected
 
 
-async def make_post(board: chess.Board, reddit: asyncpraw.Reddit):
+async def make_post(board: Board, reddit: Reddit) -> Submission:
     _, path = tempfile.mkstemp(".png")
     svg = chess.svg.board(board, size=1024)
     cairosvg.svg2png(svg, write_to=path)
 
-    title = None
-    if board.result() == "1-0":
-        title = "White wins"
-    elif board.result() == "0-1":
-        title = "Black wins"
-    elif board.result() == "*":
-        move_number = board.ply() // 2 + 1
-        to_play = "white" if board.ply() % 2 == 0 else "black"
-        title = f"Move {move_number}, {to_play} to play"
-
+    title = title_for_result(board.result(), board.ply())
     sub = await reddit.subreddit("communitychess")
     post = await sub.submit_image(title, path)
     database.insert_post(post.id, database.current_game())
+    return post
 
 
-def current_board() -> chess.Board:
-    board = chess.Board()
-    for move in database.moves():
-        board.push_san(move)
-    return board
+def title_for_result(result: str, half_moves: int) -> str:
+    match result:
+        case "1-0":
+            return "White wins"
+        case "0-1":
+            return "Black wins"
+        case "*":
+            move_number = half_moves // 2 + 1
+            to_play = "white" if half_moves % 2 == 0 else "black"
+            return f"Move {move_number}, {to_play} to play"
+        case _:
+            raise Exception("Unknown game result")
+
+
+def move_for_comment(
+    comment: str,
+    board: chess.Board,
+) -> str | chess.InvalidMoveError | chess.AmbiguousMoveError | chess.IllegalMoveError:
+    # TODO: Find the first suggested move that may not be the first move
+    candidate = comment.split(None, maxsplit=1)[0]
+    try:
+        board.parse_san(candidate)
+    except chess.InvalidMoveError as e:
+        return e
+    except chess.AmbiguousMoveError as e:
+        return e
+    except chess.IllegalMoveError as e:
+        return e
+    return candidate
 
 
 if __name__ == "__main__":
