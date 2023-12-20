@@ -37,7 +37,8 @@ def move_for_comment(board: chess.Board, comment: str) -> str | BadMove:
 def _basic_comment_test():
     board = chess.Board()
     actual = move_for_comment(board, "e4\nI think this move is good :)")
-    assert actual == "e4"
+    expected = chess.Move(chess.E2, chess.E4)
+    assert actual == expected
 
 
 def _ambiguous_move_test():
