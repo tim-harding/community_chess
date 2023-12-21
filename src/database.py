@@ -28,7 +28,7 @@ def current_game() -> int:
     match res.fetchone():
         case (int() as id,):
             return id
-        case None:
+        case (None,):
             raise NoRowsException()
         case _:
             raise ResponseFormatException()
@@ -39,7 +39,7 @@ def insert_post(reddit_id: str, game: int) -> None:
     _db.commit()
 
 
-def last_post() -> str | None:
+def last_post() -> str:
     res = _db.execute("SELECT reddit_id FROM post ORDER BY id DESC LIMIT 1")
     match res.fetchone():
         case (str() as id,):

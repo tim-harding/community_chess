@@ -11,6 +11,7 @@ import chess
 from asyncpraw import Reddit
 from asyncpraw.models import Comment
 import database
+from database import NoRowsException
 import logging
 
 
@@ -32,8 +33,13 @@ def main() -> None:
     )
     args = parser.parse_args()
     logging.basicConfig(level=args.log)
-    # TODO: Guarantee a game and post in the database
+
     database.prepare()
+    try:
+        database.current_game()
+    except NoRowsException:
+        database.insert_game()
+
     asyncio.run(async_main())
 
 
@@ -52,11 +58,20 @@ async def async_main() -> None:
 
 async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
     logging.info("entered handle_messages")
-    current_post = await reddit.submission(database.last_post())
+
     board = Board()
     for move in database.moves():
         board.push_san(move)
 
+    try:
+        logging.info("Checking for last post existence")
+        database.last_post()
+    except NoRowsException:
+        logging.info("Making initial post")
+        await make_post(reddit, board)
+
+    current_post = await reddit.submission(database.last_post())
+    logging.info("Entering message queue loop")
     while True:
         msg = await queue.get()
         logging.info(f"Got message {msg}")
@@ -78,7 +93,8 @@ async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
     sub = await reddit.subreddit("communitychess")
     async for comment in sub.stream.comments(skip_existing=True):
         TOP_LEVEL_COMMENT_PREFIX = "t3_"
-        if comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX:
+        is_top_level = comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX
+        if is_top_level:
             logging.info("Sending comment")
             await queue.put(comment)
 
@@ -87,7 +103,7 @@ async def send_play_move_notifications(queue: MsgQueue) -> None:
     logging.info("entered send_play_move_notifications")
     while True:
         # TODO: Play move at specific times
-        await asyncio.sleep(60)
+        await asyncio.sleep(5)
         logging.info("Sending play move notification")
         await queue.put(NotifyPlayMove())
 
@@ -110,12 +126,12 @@ def reply_for_comment(comment: str, board: Board) -> str:
 async def play_move(
     reddit: Reddit, board: Board, post: Submission
 ) -> Submission | None:
-    res = select_move(board, post)
-    logging.info(f"Playing move {res}")
-    match res:
+    move = await select_move(board, post)
+    logging.info(f"Playing move {move}")
+    match move:
         case None:
             return None
-        case str() as move:
+        case str():
             database.insert_move(move)
             board.push_san(move)
             if board.result() != "*":
@@ -124,12 +140,13 @@ async def play_move(
                 board.reset()
             return await make_post(reddit, board)
         case _:
-            assert_never(res)
+            assert_never(move)
 
 
-def select_move(board: Board, post: Submission) -> str | None:
+async def select_move(board: Board, post: Submission) -> str | None:
     top_score = 0
     selected = None
+    await post.load()
     for comment in post.comments:
         if comment.score > top_score:
             match move_for_comment(comment.body, board):
