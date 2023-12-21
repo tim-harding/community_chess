@@ -167,6 +167,7 @@ async def make_post(reddit: Reddit, board: Board) -> Submission:
     title = title_for_result(board.result(), board.ply())
     sub = await reddit.subreddit("communitychess")
     post = await sub.submit_image(title, path)
+    # TODO: Include PGN
     database.insert_post(post.id, database.current_game())
     return post
 
@@ -198,13 +199,35 @@ def move_for_comment(
     for candidate in candidates:
         try:
             board.parse_san(candidate)
+            return candidate
         except chess.InvalidMoveError:
-            continue
+            pass
         except chess.AmbiguousMoveError as e:
             return (candidate, e)
         except chess.IllegalMoveError as e:
             return (candidate, e)
-        return candidate
+
+        try:
+            # In case of e.g. ke4
+            board.parse_san(candidate.capitalize())
+            return candidate
+        except chess.InvalidMoveError:
+            pass
+        except chess.AmbiguousMoveError as e:
+            return (candidate, e)
+        except chess.IllegalMoveError as e:
+            return (candidate, e)
+
+        try:
+            board.parse_uci(candidate)
+            return candidate
+        except chess.InvalidMoveError:
+            pass
+        except chess.AmbiguousMoveError as e:
+            return (candidate, e)
+        except chess.IllegalMoveError as e:
+            return (candidate, e)
+
     return InvalidMoveError()
 
 
