@@ -94,7 +94,8 @@ async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
     async for comment in sub.stream.comments(skip_existing=True):
         TOP_LEVEL_COMMENT_PREFIX = "t3_"
         is_top_level = comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX
-        if is_top_level:
+        is_current_post = comment.parent_id[3:] == database.last_post()
+        if is_top_level and is_current_post:
             logging.info("Sending comment")
             await queue.put(comment)
 
