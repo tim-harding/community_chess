@@ -1,4 +1,5 @@
 import argparse
+import os
 import tempfile
 import asyncio
 from asyncio import Queue
@@ -8,6 +9,7 @@ from chess import AmbiguousMoveError, Board, IllegalMoveError, InvalidMoveError
 import chess.svg
 import cairosvg
 import chess
+import chess.pgn
 from asyncpraw import Reddit
 from asyncpraw.models import Comment
 import database
@@ -95,7 +97,7 @@ async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
         TOP_LEVEL_COMMENT_PREFIX = "t3_"
         is_top_level = comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX
         is_current_post = comment.parent_id[3:] == database.last_post()
-        if is_top_level and is_current_post:
+        if is_top_level and is_current_post and not comment.is_submitter:
             logging.info("Sending comment")
             await queue.put(comment)
 
@@ -167,7 +169,9 @@ async def make_post(reddit: Reddit, board: Board) -> Submission:
     title = title_for_result(board.result(), board.ply())
     sub = await reddit.subreddit("communitychess")
     post = await sub.submit_image(title, path)
-    # TODO: Include PGN
+    os.remove(path)
+    await post.reply(f"PGN:\n{board_pgn(board)}\n\nFEN:\n\n{board.fen()}")
+
     database.insert_post(post.id, database.current_game())
     return post
 
@@ -207,16 +211,17 @@ def move_for_comment(
         except chess.IllegalMoveError as e:
             return (candidate, e)
 
+        # In case of e.g. ke4
+        capitalized = candidate.capitalize()
         try:
-            # In case of e.g. ke4
-            board.parse_san(candidate.capitalize())
-            return candidate
+            board.parse_san(capitalized)
+            return capitalized
         except chess.InvalidMoveError:
             pass
         except chess.AmbiguousMoveError as e:
-            return (candidate, e)
+            return (capitalized, e)
         except chess.IllegalMoveError as e:
-            return (candidate, e)
+            return (capitalized, e)
 
         try:
             board.parse_uci(candidate)
@@ -229,6 +234,15 @@ def move_for_comment(
             return (candidate, e)
 
     return InvalidMoveError()
+
+
+def board_pgn(board: Board):
+    game = chess.pgn.Game()
+    node = game.root()
+    for move in board.move_stack:
+        node = node.add_main_variation(move)
+    printer = chess.pgn.StringExporter(headers=False, variations=False, comments=False)
+    return game.accept(printer)
 
 
 if __name__ == "__main__":
