@@ -1,9 +1,11 @@
 import argparse
+from datetime import timedelta
 import os
 import tempfile
 import asyncio
 from asyncio import Queue
-from typing import assert_never
+from typing import NamedTuple, assert_never
+from asyncpraw.objector import datetime
 from asyncpraw.reddit import Submission
 from chess import AmbiguousMoveError, Board, IllegalMoveError, InvalidMoveError
 import chess.svg
@@ -24,6 +26,30 @@ class NotifyPlayMove:
 MsgQueue = Queue[Comment | NotifyPlayMove]
 
 
+class ScheduleTimeout(NamedTuple):
+    seconds: int
+
+    def next_post_seconds(self) -> float:
+        return self.seconds
+
+
+class ScheduleUtc(NamedTuple):
+    posts_per_day: int
+
+    def next_post_seconds(self) -> float:
+        utc = datetime.utcnow()
+        today = datetime.combine(utc.date(), datetime.min.time())
+        seconds_per_post = 24 * 60 * 60 / self.posts_per_day
+        seconds_today = (utc - today).total_seconds()
+        elapsed_posts = seconds_today / seconds_per_post
+        next_post = elapsed_posts.__ceil__() * seconds_per_post
+        next_post_time = today + timedelta(seconds=next_post)
+        return (next_post_time - utc).total_seconds()
+
+
+Schedule = ScheduleTimeout | ScheduleUtc
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="CommunityChess Server")
     parser.add_argument(
@@ -32,6 +58,21 @@ def main() -> None:
         choices=["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"],
         default="WARN",
         help="Sets the logging verbosity level",
+    )
+    parser.add_argument(
+        "-t",
+        "--timeout",
+        type=int,
+        default=5,
+        metavar="SECONDS",
+        help="Attempt to make a move every SECONDS",
+    )
+    parser.add_argument(
+        "-u",
+        "--utc",
+        type=int,
+        metavar="TIMES",
+        help="Attempt to make a move TIMES per day, starting from UTC 00:00",
     )
     args = parser.parse_args()
     logging.basicConfig(level=args.log)
@@ -42,15 +83,19 @@ def main() -> None:
     except NoRowsException:
         database.insert_game()
 
-    asyncio.run(async_main())
+    schedule = ScheduleTimeout(args.timeout)
+    if args.utc:
+        schedule = ScheduleUtc(args.utc)
+
+    asyncio.run(async_main(schedule))
 
 
-async def async_main() -> None:
+async def async_main(schedule: Schedule) -> None:
     logging.info("Entering async_main")
     reddit = Reddit()
     queue: MsgQueue = Queue()
     tasks = [
-        asyncio.create_task(send_play_move_notifications(queue)),
+        asyncio.create_task(send_play_move_notifications(queue, schedule)),
         asyncio.create_task(forward_comments(reddit, queue)),
         asyncio.create_task(handle_messages(reddit, queue)),
     ]
@@ -76,7 +121,6 @@ async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
     logging.info("Entering message queue loop")
     while True:
         msg = await queue.get()
-        logging.info(f"Got message {msg}")
         match msg:
             case NotifyPlayMove():
                 match await play_move(reddit, board, current_post):
@@ -102,11 +146,12 @@ async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
             await queue.put(comment)
 
 
-async def send_play_move_notifications(queue: MsgQueue) -> None:
+async def send_play_move_notifications(queue: MsgQueue, schedule: Schedule) -> None:
     logging.info("entered send_play_move_notifications")
     while True:
-        # TODO: Play move at specific times
-        await asyncio.sleep(5)
+        seconds = schedule.next_post_seconds()
+        logging.info(f"Next post scheduled in {seconds} seconds")
+        await asyncio.sleep(seconds)
         logging.info("Sending play move notification")
         await queue.put(NotifyPlayMove())
 
