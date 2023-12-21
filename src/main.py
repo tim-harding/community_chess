@@ -76,9 +76,11 @@ async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
 async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
     logging.info("entered forward_comments")
     sub = await reddit.subreddit("communitychess")
-    async for comment in sub.stream.comments():
-        logging.info("Sending comment")
-        await queue.put(comment)
+    async for comment in sub.stream.comments(skip_existing=True):
+        TOP_LEVEL_COMMENT_PREFIX = "t3_"
+        if comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX:
+            logging.info("Sending comment")
+            await queue.put(comment)
 
 
 async def send_play_move_notifications(queue: MsgQueue) -> None:
