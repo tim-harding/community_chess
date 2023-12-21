@@ -4,7 +4,6 @@ import asyncio
 from asyncio import Queue
 from typing import assert_never
 from asyncpraw.reddit import Submission
-from asyncprawcore import logging
 from chess import AmbiguousMoveError, Board, IllegalMoveError, InvalidMoveError
 import chess.svg
 import cairosvg
@@ -12,6 +11,7 @@ import chess
 from asyncpraw import Reddit
 from asyncpraw.models import Comment
 import database
+import logging
 
 
 class NotifyPlayMove:
@@ -96,9 +96,13 @@ def reply_for_comment(comment: str, board: Board) -> str:
     res = move_for_comment(comment, board)
     match res:
         case str() as move:
-            return f"I found this move in your comment: {move}"
-        case InvalidMoveError() | AmbiguousMoveError() | IllegalMoveError() as e:
-            return str(e)
+            return f"I found the move suggestion {move} in your comment."
+        case InvalidMoveError():
+            return "I did not find a valid move in your comment."
+        case (str() as move, AmbiguousMoveError()):
+            return f"The move {move} is ambiguous."
+        case (str() as move, IllegalMoveError()):
+            return f"The move {move} is illegal."
         case _:
             assert_never(res)
 
@@ -166,18 +170,24 @@ def title_for_result(result: str, half_moves: int) -> str:
 def move_for_comment(
     comment: str,
     board: chess.Board,
-) -> str | chess.InvalidMoveError | chess.AmbiguousMoveError | chess.IllegalMoveError:
-    # TODO: Find the first suggested move that may not be the first move
-    candidate = comment.split(None, maxsplit=1)[0]
-    try:
-        board.parse_san(candidate)
-    except chess.InvalidMoveError as e:
-        return e
-    except chess.AmbiguousMoveError as e:
-        return e
-    except chess.IllegalMoveError as e:
-        return e
-    return candidate
+) -> (
+    str
+    | InvalidMoveError
+    | tuple[str, AmbiguousMoveError]
+    | tuple[str, IllegalMoveError]
+):
+    candidates = comment.split()
+    for candidate in candidates:
+        try:
+            board.parse_san(candidate)
+        except chess.InvalidMoveError:
+            continue
+        except chess.AmbiguousMoveError as e:
+            return (candidate, e)
+        except chess.IllegalMoveError as e:
+            return (candidate, e)
+        return candidate
+    return InvalidMoveError()
 
 
 if __name__ == "__main__":
