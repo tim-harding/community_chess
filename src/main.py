@@ -63,7 +63,6 @@ def main() -> None:
         "-t",
         "--timeout",
         type=int,
-        default=5,
         metavar="SECONDS",
         help="Attempt to make a move every SECONDS",
     )
@@ -71,6 +70,7 @@ def main() -> None:
         "-u",
         "--utc",
         type=int,
+        default=2,
         metavar="TIMES",
         help="Attempt to make a move TIMES per day, starting from UTC 00:00",
     )
@@ -83,9 +83,9 @@ def main() -> None:
     except NoRowsException:
         database.insert_game()
 
-    schedule = ScheduleTimeout(args.timeout)
+    schedule = ScheduleUtc(args.utc)
     if args.utc:
-        schedule = ScheduleUtc(args.utc)
+        schedule = ScheduleTimeout(args.timeout)
 
     asyncio.run(async_main(schedule))
 
