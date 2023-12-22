@@ -16,7 +16,7 @@ source .venv/bin/activate
 
 3. Install dependencies
 ```sh 
-pip install -r requirements.txt`. 
+pip install -r requirements.txt`
 ```
 
 4. [Set up](#authentication) Reddit API authentication
