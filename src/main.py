@@ -87,7 +87,15 @@ def main() -> None:
     if args.timeout:
         schedule = ScheduleTimeout(args.timeout)
 
+    asyncio.get_event_loop().set_exception_handler(handle_async_exception)
+
+    logging.info("About to run async_main")
     asyncio.run(async_main(schedule))
+
+
+def handle_async_exception(_, context):
+    msg = context.get("exception", context["message"])
+    logging.error(msg)
 
 
 async def async_main(schedule: Schedule) -> None:
