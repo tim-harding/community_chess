@@ -102,6 +102,7 @@ async def async_main(schedule: Schedule) -> None:
     logging.info("Entering async_main")
     reddit = Reddit()
     queue: MsgQueue = Queue()
+
     tasks = [
         asyncio.create_task(send_play_move_notifications(queue, schedule)),
         asyncio.create_task(forward_comments(reddit, queue)),
@@ -144,7 +145,7 @@ async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
 
 async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
     logging.info("entered forward_comments")
-    sub = await reddit.subreddit("communitychess")
+    sub = await reddit.subreddit("CommunityChess")
     async for comment in sub.stream.comments(skip_existing=True):
         TOP_LEVEL_COMMENT_PREFIX = "t3_"
         is_top_level = comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX
@@ -220,7 +221,7 @@ async def make_post(reddit: Reddit, board: Board) -> Submission:
     cairosvg.svg2png(svg, write_to=path)
 
     title = title_for_result(board.result(), board.ply())
-    sub = await reddit.subreddit("communitychess")
+    sub = await reddit.subreddit("CommunityChess")
     post = await sub.submit_image(title, path)
     os.remove(path)
     await post.reply(f"PGN:\n{board_pgn(board)}\n\nFEN:\n\n{board.fen()}")
