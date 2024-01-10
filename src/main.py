@@ -84,7 +84,7 @@ def main() -> None:
         database.insert_game()
 
     schedule = ScheduleUtc(args.utc)
-    if args.utc:
+    if args.timeout:
         schedule = ScheduleTimeout(args.timeout)
 
     asyncio.run(async_main(schedule))
