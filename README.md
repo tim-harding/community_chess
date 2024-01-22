@@ -6,7 +6,7 @@ A moderator bot for [Community Chess](https://www.reddit.com/r/CommunityChess/),
 
 1. Create a virtual environment to work in
 ```sh
-python -m venv .venv
+pyenv exec python -m venv .venv
 ```
 
 2. Activate the virtual environment each time you open the project
@@ -16,12 +16,17 @@ source .venv/bin/activate
 
 3. Install dependencies
 ```sh 
-pip install -r requirements.txt`
+pyenv exec pip install -r requirements/dev.txt`
 ```
 
 4. [Set up](#authentication) Reddit API authentication
 
-4. Run the bot
+5. To perform type checking, use
+```sh
+pyenv exec mypy src/main.py
+```
+
+5. Run the bot
 
 - `--help` shows options
 - `--timeout` sets how frequently the bot should look for moves to play
@@ -30,7 +35,7 @@ pip install -r requirements.txt`
 ```sh
 # Enable verbose logging and 
 # check for moves on the current post every five seconds
-python src/main.py --log INFO --timeout 5
+pyenv exec python src/main.py --log INFO --timeout 5
 ```
 
 ## Authentication 

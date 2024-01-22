@@ -1,6 +1,20 @@
+from enum import IntEnum, auto
 import sqlite3
 
+import chess
+from moves import MoveNormal
+
 _db = sqlite3.connect("communitychess.db")
+
+
+class Outcome(IntEnum):
+    ONGOING = auto()
+    DRAW = auto()
+    STALEMATE = auto()
+    VICTORY_WHITE = auto()
+    VICTORY_BLACK = auto()
+    RESIGNATION_WHITE = auto()
+    RESIGNATION_BLACK = auto()
 
 
 class ResponseFormatException(Exception):
@@ -13,8 +27,11 @@ class NoRowsException(Exception):
         super().__init__("Database response contains no rows")
 
 
-def insert_move(san: str) -> None:
-    _db.execute("INSERT INTO move(san, game) VALUES (?, ?)", (san, current_game()))
+def set_game_outcome(outcome: Outcome):
+    _db.execute(
+        "UPDATE game SET outcome = ? WHERE id = (SELECT MAX(id) FROM game)",
+        (int(outcome),),
+    )
     _db.commit()
 
 
@@ -50,24 +67,36 @@ def last_post() -> str:
             raise ResponseFormatException()
 
 
-def moves() -> list[str]:
-    out: list[str] = []
+def insert_move(move: MoveNormal) -> None:
+    _db.execute(
+        "INSERT INTO move(uci, draw_offer, game) VALUES (?, ?, (SELECT MAX(id) FROM game))",
+        (move.move.uci(), int(move.offer_draw)),
+    )
+    _db.commit()
+
+
+def moves() -> list[MoveNormal]:
+    out: list[MoveNormal] = []
     for row in _db.execute(
-        "SELECT san FROM move WHERE game = (SELECT MAX(id) FROM game)"
+        "SELECT uci, draw_offer FROM move WHERE game = (SELECT MAX(id) FROM game)"
     ):
         match row:
-            case (str() as san,):
-                out.append(san)
+            case (str() as uci, int() as draw_offer):
+                out.append(MoveNormal(chess.Move.from_uci(uci), draw_offer == 1))
             case _:
                 raise ResponseFormatException()
     return out
 
 
 def prepare() -> None:
+    for outcome in Outcome:
+        assert outcome >= 1 and outcome <= 7
+
     _db.execute(
         """
         CREATE TABLE IF NOT EXISTS game(
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL
+            outcome INTEGER CHECK(outcome >= 1 AND outcome <= 6) NOT NULL
         )
         """
     )
@@ -75,7 +104,8 @@ def prepare() -> None:
         """
         CREATE TABLE IF NOT EXISTS move(
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-            san TEXT NOT NULL,
+            uci TEXT NOT NULL,
+            draw_offer INTEGER NOT NULL,
             game INTEGER NOT NULL,
             FOREIGN KEY(game) REFERENCES game(id)
         )

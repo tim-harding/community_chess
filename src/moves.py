@@ -1,0 +1,113 @@
+from collections.abc import Callable
+import re
+from typing import Final, NamedTuple
+import chess
+
+
+type Move = MoveNormal | MoveResign
+
+
+class MoveNormal(NamedTuple):
+    move: chess.Move
+    offer_draw: bool
+
+
+class MoveResign:
+    pass
+
+
+type MoveError = MoveErrorNotFound | MoveErrorAmbiguous | MoveErrorIllegal
+
+
+class MoveErrorNotFound(Exception):
+    pass
+
+
+class MoveErrorAmbiguous(Exception):
+    move_text: str
+
+    def __init__(self, move_text: str) -> None:
+        self.move_text = move_text
+
+
+class MoveErrorIllegal(Exception):
+    move_text: str
+
+    def __init__(self, move_text: str) -> None:
+        self.move_text = move_text
+
+
+_MOVE_PATTERN: Final = re.compile(
+    r"([Rr][Ee][Ss][Ii][Gg][Nn])|(?:([Oo0](?:-[Oo0]){1,2}|[KQRBNkqrbn]?[a-h]?[1-8]?x?[a-h][1-8](?:\=[QRBNqrbn])?[+#]?)|([a-h][1-8][a-h][1-8][kqrbn]?))( [Dd][Rr][Aa][Ww])?"
+)
+
+
+def move_for_comment(
+    comment: str,
+    board: chess.Board,
+) -> Move | MoveError:
+    first_line = comment.partition("\n")[0]
+    match _MOVE_PATTERN.search(first_line):
+        case None:
+            return MoveErrorNotFound()
+        case re.Match() as m:
+            match m.groups():
+                case (str(), None, None, None):
+                    return MoveResign()
+
+                case (None, str() as san, None, None):
+                    return _san_move(board, san, False)
+
+                case (None, str() as san, None, str()):
+                    return _san_move(board, san, True)
+
+                case (None, None, str() as uci, None):
+                    return _uci_move(board, uci, False)
+
+                case (None, None, str() as uci, str()):
+                    return _uci_move(board, uci, True)
+
+                case _:
+                    raise Exception("Unexpected regex match groups")
+
+    return MoveErrorNotFound()
+
+
+def _san_move(
+    board: chess.Board,
+    san: str,
+    offer_draw: bool,
+) -> MoveNormal | MoveError:
+    san = (
+        san.replace("k", "K")
+        .replace("q", "Q")
+        .replace("r", "R")
+        .replace("b", "B")
+        .replace("n", "N")
+        .replace("o", "O")
+    )
+    return _try_parse_move(chess.Board.parse_san, board, san, offer_draw)
+
+
+def _uci_move(
+    board: chess.Board,
+    uci: str,
+    offer_draw: bool,
+) -> MoveNormal | MoveError:
+    return _try_parse_move(chess.Board.parse_uci, board, uci, offer_draw)
+
+
+def _try_parse_move(
+    f: Callable[[chess.Board, str], chess.Move],
+    board: chess.Board,
+    move_text: str,
+    offer_draw: bool,
+) -> MoveNormal | MoveError:
+    try:
+        return MoveNormal(f(board, move_text), offer_draw)
+    except chess.InvalidMoveError:
+        return MoveErrorNotFound()
+    except chess.AmbiguousMoveError:
+        return MoveErrorAmbiguous(move_text)
+    except chess.IllegalMoveError:
+        return MoveErrorIllegal(move_text)
