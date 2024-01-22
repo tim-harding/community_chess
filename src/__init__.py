@@ -2,7 +2,6 @@ from enum import Enum, auto
 from moves import (
     MoveErrorAmbiguous,
     MoveErrorIllegal,
-    MoveErrorNotFound,
     MoveNormal,
     MoveResign,
     move_for_comment,
@@ -198,7 +197,7 @@ def reply_for_comment(comment: str, board: Board) -> str:
                 return f"I found the move {move} with a draw offer in your comment."
         case MoveResign():
             return "I found the suggestion to resign in your comment."
-        case MoveErrorNotFound():
+        case None:
             return "I did not find a valid move in your comment. Make sure to put valid SAN or UCI notation in the first line to suggest a move."
         case MoveErrorAmbiguous():
             return f"The move {res.move_text} is ambiguous."
@@ -306,7 +305,7 @@ async def select_move(board: Board, post: Submission) -> MoveNormal | MoveResign
                 case MoveNormal() | MoveResign():
                     selected = move
                     top_score = comment.score
-                case MoveErrorNotFound() | MoveErrorAmbiguous() | MoveErrorIllegal():
+                case None | MoveErrorAmbiguous() | MoveErrorIllegal():
                     pass
                 case _:
                     assert_never(move)
