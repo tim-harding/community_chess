@@ -1,5 +1,5 @@
 import unittest
-from moves import (
+from . import (
     MoveResign,
     move_for_comment,
     MoveNormal,
