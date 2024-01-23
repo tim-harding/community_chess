@@ -9,9 +9,9 @@ A moderator bot for [Community Chess](https://www.reddit.com/r/CommunityChess/),
 Use [pyenv](https://github.com/pyenv/pyenv) to manage your Python installation. Create a virtual environment and install the package.
 
 ```sh
-pyenv exec python -m venv .venv
+python -m venv .venv
 source .venv/bin/activate # Run each time you open the project
-pyenv exec pip install --editable .[dev]
+pip install --editable .[dev]
 ```
 
 ### Authentication 
@@ -43,13 +43,13 @@ refresh_token=MY_REFRESH_TOKEN
 #### Type checking
 
 ```sh
-pyenv exec mypy -p chessbot
+mypy
 ```
 
 #### Unit tests
 
 ```sh
-pyenv exec python -m unittest
+python -m unittest
 ```
 
 #### Running

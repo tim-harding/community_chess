@@ -1,12 +1,16 @@
 import random
 import socket
-import praw
+import asyncpraw
+import asyncio
 
 
 def main():
+    asyncio.run(async_main())
+
+async def async_main():
     scopes = ["read", "submit"]
 
-    reddit = praw.Reddit(
+    reddit = asyncpraw.Reddit(
         redirect_uri="http://localhost:8080",
         user_agent="obtain_refresh_token/v0 by u/bboe",
     )
@@ -35,9 +39,7 @@ def main():
 
 def receive_connection():
     """Wait for and then return a connected socket..
-
     Opens a TCP connection on port 8080, and waits for a single client.
-
     """
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
