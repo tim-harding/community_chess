@@ -11,7 +11,6 @@ from . import database
 from .database import NoRowsException, Outcome
 
 from asyncpraw import Reddit
-from asyncpraw.objector import datetime
 from asyncpraw.reddit import Submission
 from asyncpraw.models import Comment
 
@@ -31,7 +30,7 @@ import cairosvg
 import logging
 from asyncio import Queue
 from typing import NamedTuple, assert_never
-from datetime import timedelta
+from datetime import timedelta, datetime, UTC
 
 
 class Player(Enum):
@@ -66,16 +65,14 @@ class ScheduleUtc(NamedTuple):
     posts_per_day: int
 
     def next_post_seconds(self) -> float:
-        utc = datetime.utcnow()
+        utc = datetime.now(UTC)
         today = datetime.combine(utc.date(), datetime.min.time())
         seconds_per_post = 24 * 60 * 60 / self.posts_per_day
         seconds_today = (utc - today).total_seconds()
         elapsed_posts = seconds_today / seconds_per_post
         next_post = elapsed_posts.__ceil__() * seconds_per_post
         next_post_time = today + timedelta(seconds=next_post)
-        seconds = (next_post_time - utc).total_seconds()
-        assert isinstance(seconds, float)  # For mypy
-        return seconds
+        return (next_post_time - utc).total_seconds()
 
 
 Schedule = ScheduleTimeout | ScheduleUtc
