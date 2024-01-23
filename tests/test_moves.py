@@ -25,6 +25,16 @@ class TestMoves(unittest.TestCase):
             MoveNormal(chess.Move(chess.G1, chess.F3), False),
         )
 
+    def test_found_multiline(self):
+        self.assertEqual(
+            move_for_comment("e4\nThis move seems good", Board()),
+            MoveNormal(chess.Move(chess.E2, chess.E4), False),
+        )
+        self.assertEqual(
+            move_for_comment("  nf3  \nShould we resign?", Board()),
+            MoveNormal(chess.Move(chess.G1, chess.F3), False),
+        )
+
     def test_found_with_draw(self):
         self.assertEqual(
             move_for_comment("e4 Draw", Board()),
@@ -48,6 +58,7 @@ class TestMoves(unittest.TestCase):
 
     def test_resign(self):
         self.assertEqual(move_for_comment("resign", Board()), MoveResign())
+
 
 
 if __name__ == "__main__":

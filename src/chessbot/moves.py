@@ -5,9 +5,6 @@ import chess
 from chess import Board
 
 
-type Move = MoveNormal | MoveResign
-
-
 class MoveNormal(NamedTuple):
     move: chess.Move
     offer_draw: bool
@@ -16,9 +13,6 @@ class MoveNormal(NamedTuple):
 class MoveResign:
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, MoveResign)
-
-
-type MoveError = MoveErrorAmbiguous | MoveErrorIllegal
 
 
 class MoveErrorAmbiguous(Exception):
@@ -57,7 +51,7 @@ _MOVE_PATTERN: Final = re.compile(
 def move_for_comment(
     comment: str,
     board: Board,
-) -> Move | MoveError | None:
+) -> MoveNormal | MoveResign | MoveErrorIllegal | MoveErrorAmbiguous | None:
     first_line = comment.partition("\n")[0]
     m = _MOVE_PATTERN.search(first_line)
     match m:
@@ -85,7 +79,7 @@ def _san_move(
     board: Board,
     san: str,
     offer_draw: bool,
-) -> MoveNormal | MoveError | None:
+) -> MoveNormal | MoveErrorIllegal | MoveErrorAmbiguous | None:
     san = (
         san.replace("k", "K")
         .replace("q", "Q")
@@ -101,7 +95,7 @@ def _uci_move(
     board: Board,
     uci: str,
     offer_draw: bool,
-) -> MoveNormal | MoveError | None:
+) -> MoveNormal | MoveErrorIllegal | MoveErrorAmbiguous | None:
     return _try_parse_move(Board.parse_uci, board, uci, offer_draw)
 
 
@@ -110,7 +104,7 @@ def _try_parse_move(
     board: Board,
     move_text: str,
     offer_draw: bool,
-) -> MoveNormal | MoveError | None:
+) -> MoveNormal | MoveErrorIllegal | MoveErrorAmbiguous | None:
     try:
         return MoveNormal(f(board, move_text), offer_draw)
     except chess.InvalidMoveError:

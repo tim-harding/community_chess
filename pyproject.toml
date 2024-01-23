@@ -14,7 +14,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ['mypy ~=1.8', 'pyright', 'ruff']
+dev = [
+    'mypy ~=1.8',
+    'pyright',
+    'ruff',
+    'ruff-lsp',
+]
 
 [project.urls]
 Repository = 'https://github.com/tim-harding/community_chess'
