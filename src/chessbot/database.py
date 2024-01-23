@@ -27,7 +27,7 @@ class NoRowsException(Exception):
         super().__init__("Database response contains no rows")
 
 
-def set_game_outcome(outcome: Outcome):
+def set_game_outcome(outcome: Outcome) -> None:
     _db.execute(
         "UPDATE game SET outcome = ? WHERE id = (SELECT MAX(id) FROM game)",
         (int(outcome),),

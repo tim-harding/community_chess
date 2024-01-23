@@ -38,7 +38,7 @@ class Player(Enum):
     WHITE = auto()
     BLACK = auto()
 
-    def __str__(self):
+    def __str__(self) -> str:
         match self:
             case Player.WHITE:
                 return "white"
@@ -73,7 +73,9 @@ class ScheduleUtc(NamedTuple):
         elapsed_posts = seconds_today / seconds_per_post
         next_post = elapsed_posts.__ceil__() * seconds_per_post
         next_post_time = today + timedelta(seconds=next_post)
-        return (next_post_time - utc).total_seconds()
+        seconds = (next_post_time - utc).total_seconds()
+        assert isinstance(seconds, float)  # For mypy
+        return seconds
 
 
 Schedule = ScheduleTimeout | ScheduleUtc
@@ -242,7 +244,7 @@ def resignation_for_board(board: Board) -> Outcome:
             assert_never(player)
 
 
-async def new_game(reddit: Reddit, board: Board, outcome: Outcome):
+async def new_game(reddit: Reddit, board: Board, outcome: Outcome) -> None:
     await make_post(reddit, board, outcome)
     database.set_game_outcome(outcome)
     database.insert_game()

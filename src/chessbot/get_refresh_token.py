@@ -4,10 +4,11 @@ import asyncpraw
 import asyncio
 
 
-def main():
+def main() -> None:
     asyncio.run(async_main())
 
-async def async_main():
+
+async def async_main() -> None:
     scopes = ["read", "submit"]
 
     reddit = asyncpraw.Reddit(
@@ -28,16 +29,16 @@ async def async_main():
             client,
             f"State mismatch. Expected: {state} Received: {params['state']}",
         )
-        return 1
+        exit(1)
     elif "error" in params:
         send_message(client, params["error"])
-        return 1
+        exit(1)
 
     refresh_token = reddit.auth.authorize(params["code"])
     send_message(client, f"Refresh token: {refresh_token}")
 
 
-def receive_connection():
+def receive_connection() -> socket.socket:
     """Wait for and then return a connected socket..
     Opens a TCP connection on port 8080, and waits for a single client.
     """
@@ -50,7 +51,7 @@ def receive_connection():
     return client
 
 
-def send_message(client, message):
+def send_message(client: socket.socket, message: str) -> None:
     """Send message to client and close the connection."""
     print(message)
     client.send(f"HTTP/1.1 200 OK\r\n\r\n{message}".encode())
