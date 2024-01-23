@@ -1,5 +1,8 @@
 **/__pycache__
+dist
 .venv
+.mypy_cache
+*.egg-info
 generated
 praw.ini
 *.pyc

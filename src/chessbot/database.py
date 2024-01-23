@@ -2,7 +2,7 @@ from enum import IntEnum, auto
 import sqlite3
 
 import chess
-from moves import MoveNormal
+from .moves import MoveNormal
 
 _db = sqlite3.connect("communitychess.db")
 

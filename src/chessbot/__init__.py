@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from moves import (
+from .moves import (
     MoveErrorAmbiguous,
     MoveErrorIllegal,
     MoveNormal,
@@ -7,8 +7,8 @@ from moves import (
     move_for_comment,
 )
 
-import database
-from database import NoRowsException, Outcome
+from . import database
+from .database import NoRowsException, Outcome
 
 from asyncpraw import Reddit
 from asyncpraw.objector import datetime

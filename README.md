@@ -4,47 +4,24 @@ A moderator bot for [Community Chess](https://www.reddit.com/r/CommunityChess/),
 
 ## Contributing
 
-1. Create a virtual environment to work in
+### Setup
+
+Use [pyenv](https://github.com/pyenv/pyenv) to manage your Python installation. Create a virtual environment and install the package.
+
 ```sh
 pyenv exec python -m venv .venv
+source .venv/bin/activate # Run each time you open the project
+pyenv exec pip install --editable .[dev]
 ```
 
-2. Activate the virtual environment each time you open the project
-```sh
-source .venv/bin/activate
-```
-
-3. Install dependencies
-```sh 
-pyenv exec pip install -r requirements/dev.txt`
-```
-
-4. [Set up](#authentication) Reddit API authentication
-
-5. To perform type checking, use
-```sh
-pyenv exec mypy src/main.py
-```
-
-5. Run the bot
-
-- `--help` shows options
-- `--timeout` sets how frequently the bot should look for moves to play
-- `--log` sets the log level
-
-```sh
-# Enable verbose logging and 
-# check for moves on the current post every five seconds
-pyenv exec python src/main.py --log INFO --timeout 5
-```
-
-## Authentication 
+### Authentication 
 
 This bot uses Praw's [Code Flow](https://praw.readthedocs.io/en/stable/getting_started/authentication.html#code-flow) for authentication. 
 
 1. Create an application in your Reddit [application preferences](https://www.reddit.com/prefs/apps/). Note your `client_secret`, shown when your press *edit*, and your `client_id`, listed below *personal use script*.
 
 2. Set up your `praw.ini` in the project root as follows:
+
 ```ini
 [DEFAULT]
 redirect_uri=http://localhost:8080
@@ -53,10 +30,36 @@ client_secret=MY_CLIENT_SECRET
 user_agent=script:com.MY_NAME.communitychess:v0.1.0 (by /u/MY_USERNAME)
 ```
 
-3. Use `python src/get_refresh_token.py` to generate a refresh token. 
+3. Use `get_refresh_token` to generate a refresh token. 
 
 4. Add this line to your `praw.ini`:
 
 ```ini
 refresh_token=MY_REFRESH_TOKEN
+```
+
+### Testing
+
+#### Type checking
+
+```sh
+pyenv exec mypy -p chessbot
+```
+
+#### Unit tests
+
+```sh
+pyenv exec python -m unittest
+```
+
+#### Running
+
+- `--help` shows options
+- `--timeout` sets how frequently the bot should look for moves to play
+- `--log` sets the log level
+
+```sh
+# Enable verbose logging and 
+# check for moves on the current post every five seconds
+chessbot --log INFO --timeout 5
 ```

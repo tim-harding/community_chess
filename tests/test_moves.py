@@ -1,5 +1,5 @@
 import unittest
-from . import (
+from chessbot.moves import (
     MoveResign,
     move_for_comment,
     MoveNormal,

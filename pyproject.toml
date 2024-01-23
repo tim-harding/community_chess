@@ -1,0 +1,29 @@
+[project]
+name = 'chessbot'
+authors = [{ name = 'Timothy Harding', email = 'tim@timharding.co' }]
+description = 'A Reddit bot for moderating the /r/communitychess subreddit'
+readme = 'README.md'
+requires-python = '>=3.12'
+keywords = ['reddit', 'chess']
+version = '0.1.0'
+license = {file = 'LICENSE'}
+dependencies = [
+    'asyncpraw ~=7.7',
+    'praw ~=7.7', # TODO: Remove
+    'chess ~=1.10',
+    'cairosvg ~=2.7',
+]
+
+[project.urls]
+Repository = 'https://github.com/tim-harding/community_chess'
+
+[project.scripts]
+chessbot = 'chessbot:main'
+get_refresh_token = 'chessbot.get_refresh_token:main'
+
+[project.optional-dependencies]
+dev = ['mypy ~=1.8']
+
+[build-system]
+requires = ['setuptools']
+build-backend = 'setuptools.build_meta'
