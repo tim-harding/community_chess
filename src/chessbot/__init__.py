@@ -80,13 +80,17 @@ Schedule = ScheduleTimeout | ScheduleUtc
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="CommunityChess Server")
+
     parser.add_argument(
         "-l",
         "--log",
+        type=str,
         choices=["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"],
         default="WARN",
+        metavar="LEVEL",
         help="Sets the logging verbosity level",
     )
+
     parser.add_argument(
         "-t",
         "--timeout",
@@ -94,6 +98,7 @@ def main() -> None:
         metavar="SECONDS",
         help="Attempt to make a move every SECONDS",
     )
+
     parser.add_argument(
         "-u",
         "--utc",
@@ -102,8 +107,19 @@ def main() -> None:
         metavar="TIMES",
         help="Attempt to make a move TIMES per day, starting from UTC 00:00",
     )
+
+    parser.add_argument(
+        "-d",
+        "--database",
+        type=str,
+        default="communitychess.db",
+        metavar="PATH",
+        help="The file to use for the sqlite database",
+    )
+
     args = parser.parse_args()
     logging.basicConfig(level=args.log)
+    database.open_db(args.database)
 
     database.prepare()
     try:
