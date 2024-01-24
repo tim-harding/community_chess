@@ -8,7 +8,8 @@ keywords = ['reddit', 'chess']
 version = '0.1.0'
 license = {file = 'LICENSE'}
 dependencies = [
-    'asyncpraw ~=7.7',
+    # 'asyncpraw ~=7.7',
+    'asyncpraw@git+https://github.com/tim-harding/asyncpraw',
     'chess ~=1.10',
     'cairosvg ~=2.7',
 ]

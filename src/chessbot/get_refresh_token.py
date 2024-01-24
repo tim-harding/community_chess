@@ -1,7 +1,7 @@
 import random
 import socket
-import asyncpraw
 import asyncio
+from asyncpraw.reddit import Reddit
 
 
 def main() -> None:
@@ -11,7 +11,7 @@ def main() -> None:
 async def async_main() -> None:
     scopes = ["read", "submit"]
 
-    reddit = asyncpraw.Reddit(
+    reddit = Reddit(
         redirect_uri="http://localhost:8080",
         user_agent="obtain_refresh_token/v0 by u/bboe",
     )

@@ -10,9 +10,9 @@ from .moves import (
 from . import database
 from .database import NoRowsException, Outcome
 
-from asyncpraw import Reddit
-from asyncpraw.reddit import Submission
-from asyncpraw.models import Comment
+from asyncpraw.reddit import Reddit
+from asyncpraw.models.reddit.submission import Submission
+from asyncpraw.models.reddit.comment import Comment
 
 import chess
 from chess import (
@@ -296,8 +296,8 @@ def outcome_for_board(board: Board) -> Outcome:
 async def select_move(board: Board, post: Submission) -> MoveNormal | MoveResign | None:
     top_score = 0
     selected = None
-    await post.load()
-    for comment in post.comments:
+    await post.load()  # type: ignore
+    async for comment in post.comments:
         if comment.score > top_score:
             move = move_for_comment(comment.body, board)
             match move:
@@ -311,7 +311,9 @@ async def select_move(board: Board, post: Submission) -> MoveNormal | MoveResign
     return selected
 
 
-async def make_post(reddit: Reddit, board: Board, outcome: Outcome) -> Submission:
+async def make_post(
+    reddit: Reddit, board: Board, outcome: Outcome
+) -> Submission | None:
     _, path = tempfile.mkstemp(".png")
     svg = chess.svg.board(board, size=1024)
     cairosvg.svg2png(svg, write_to=path)
@@ -320,10 +322,16 @@ async def make_post(reddit: Reddit, board: Board, outcome: Outcome) -> Submissio
     sub = await reddit.subreddit("CommunityChess")
     post = await sub.submit_image(title, path)
     os.remove(path)
-    await post.reply(f"PGN:\n{board_pgn(board)}\n\nFEN:\n\n{board.fen()}")
-
-    database.insert_post(post.id, database.current_game())
-    return post
+    match post:
+        case Submission():
+            await post.reply(f"PGN:\n{board_pgn(board)}\n\nFEN:\n\n{board.fen()}")
+            database.insert_post(post.id, database.current_game())
+            return post
+        case None:
+            logging.error("Failed to make a post")
+            return None
+        case _:
+            assert_never(post)
 
 
 def title_for_outcome(outcome: Outcome, half_moves: int) -> str:
