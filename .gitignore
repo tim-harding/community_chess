@@ -1,9 +1,9 @@
 **/__pycache__
 dist
+generated
 .venv
 .mypy_cache
 *.egg-info
-generated
-praw.ini
+*.ini
 *.pyc
 *.db

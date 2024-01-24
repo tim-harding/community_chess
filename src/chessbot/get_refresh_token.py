@@ -34,7 +34,8 @@ async def async_main() -> None:
         send_message(client, params["error"])
         exit(1)
 
-    refresh_token = reddit.auth.authorize(params["code"])
+    refresh_token = await reddit.auth.authorize(params["code"])
+    await reddit.close()
     send_message(client, f"Refresh token: {refresh_token}")
 
 
