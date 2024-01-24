@@ -95,8 +95,8 @@ def prepare() -> None:
     _db.execute(
         """
         CREATE TABLE IF NOT EXISTS game(
-            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL
-            outcome INTEGER CHECK(outcome >= 1 AND outcome <= 6) NOT NULL
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            outcome INTEGER CHECK(outcome >= 1 AND outcome <= 6) DEFAULT 1 NOT NULL
         )
         """
     )

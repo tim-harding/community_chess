@@ -66,7 +66,7 @@ class ScheduleUtc(NamedTuple):
 
     def next_post_seconds(self) -> float:
         utc = datetime.now(UTC)
-        today = datetime.combine(utc.date(), datetime.min.time())
+        today = datetime.combine(utc.date(), datetime.min.time(), UTC)
         seconds_per_post = 24 * 60 * 60 / self.posts_per_day
         seconds_today = (utc - today).total_seconds()
         elapsed_posts = seconds_today / seconds_per_post
