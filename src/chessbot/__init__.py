@@ -28,7 +28,7 @@ import tempfile
 import asyncio
 import cairosvg
 import logging
-from asyncio import Queue
+from asyncio import CancelledError, Queue
 from typing import NamedTuple, assert_never
 from datetime import timedelta, datetime, UTC
 
@@ -123,14 +123,18 @@ async def async_main(schedule: Schedule) -> None:
     logging.info("Entering async_main")
     reddit = Reddit()
     queue: MsgQueue = Queue()
-
-    tasks = [
-        asyncio.create_task(send_play_move_notifications(queue, schedule)),
-        asyncio.create_task(forward_comments(reddit, queue)),
-        asyncio.create_task(handle_messages(reddit, queue)),
-    ]
-    for task in tasks:
-        await task
+    tasks = []
+    try:
+        async with asyncio.TaskGroup() as group:
+            tasks = [
+                group.create_task(send_play_move_notifications(queue, schedule)),
+                group.create_task(forward_comments(reddit, queue)),
+                group.create_task(handle_messages(reddit, queue)),
+            ]
+    except CancelledError:
+        for task in tasks:
+            task.cancel()
+        await reddit.close()
 
 
 async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
@@ -147,33 +151,63 @@ async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
         logging.info("Making initial post")
         await make_post(reddit, board, Outcome.ONGOING)
 
-    current_post = await reddit.submission(database.last_post())
+    try:
+        current_post = await reddit.submission(database.last_post())
+    except CancelledError:
+        logging.info("Cancelling handle_messages")
+        return
+
     logging.info("Entering message queue loop")
     while True:
-        msg = await queue.get()
+        try:
+            msg = await queue.get()
+        except CancelledError:
+            logging.info("Cancelling handle_messages")
+            break
+
         match msg:
             case NotifyPlayMove():
-                match await play_move(reddit, board, current_post):
+                try:
+                    post = await play_move(reddit, board, current_post)
+                except CancelledError:
+                    logging.info("Cancelling handle_messages")
+                    break
+
+                match post:
                     case None:
                         pass
                     case Submission() as post:
                         current_post = post
             case Comment() as comment:
                 reply = reply_for_comment(comment.body, board)
-                await comment.reply(reply)
+                try:
+                    await comment.reply(reply)
+                except CancelledError:
+                    logging.info("Cancelling handle_messages")
+                    break
                 logging.info(f"Responded to comment '{comment.body}' with '{reply}'")
 
 
 async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
     logging.info("entered forward_comments")
-    sub = await reddit.subreddit("CommunityChess")
+
+    try:
+        sub = await reddit.subreddit("CommunityChess")
+    except CancelledError:
+        logging.info("Cancelling forward_comments")
+        return
+
     async for comment in sub.stream.comments(skip_existing=True):
         TOP_LEVEL_COMMENT_PREFIX = "t3_"
         is_top_level = comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX
         is_current_post = comment.parent_id[3:] == database.last_post()
         if is_top_level and is_current_post and not comment.is_submitter:
             logging.info("Sending comment")
-            await queue.put(comment)
+            try:
+                await queue.put(comment)
+            except CancelledError:
+                logging.info("Cancelling forward_comments")
+                break
 
 
 async def send_play_move_notifications(queue: MsgQueue, schedule: Schedule) -> None:
@@ -181,9 +215,17 @@ async def send_play_move_notifications(queue: MsgQueue, schedule: Schedule) -> N
     while True:
         seconds = schedule.next_post_seconds()
         logging.info(f"Next post scheduled in {seconds} seconds")
-        await asyncio.sleep(seconds)
+        try:
+            await asyncio.sleep(seconds)
+        except CancelledError:
+            logging.info("Cancelling send_play_move_notifications")
+            break
         logging.info("Sending play move notification")
-        await queue.put(NotifyPlayMove())
+        try:
+            await queue.put(NotifyPlayMove())
+        except CancelledError:
+            logging.info("Cancelling send_play_move_notifications")
+            break
 
 
 def reply_for_comment(comment: str, board: Board) -> str:
