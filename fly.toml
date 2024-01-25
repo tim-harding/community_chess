@@ -1,15 +1,9 @@
-# To deploy without redundancy: 
-# fly deploy --ha=false
-# fly scale count 1 # For existing deployments
-
 app = "community-chess"
 primary_region = "sea"
 
 [build]
 dockerfile = "Dockerfile"
 
-# View the volume in the Machine file system:
-# fly ssh console -s -C df
 [mounts]
 source = "community_chess_db" # name
 destination = "/sqlite" # mount point matches Dockerfile

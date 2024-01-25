@@ -54,12 +54,40 @@ python -m unittest
 
 #### Running
 
-- `--help` shows options
-- `--timeout` sets how frequently the bot should look for moves to play
-- `--log` sets the log level
+If you wish to test the bot in a live environment, please do so over at [/r/testingground4bots](https://www.reddit.com/r/testingground4bots/) or somewhere else off the main sub. 
 
 ```sh
+# Show command documentation
+chessbot --help
+
 # Enable verbose logging and 
 # check for moves on the current post every five seconds
 chessbot --log INFO --timeout 5
+```
+
+### Deployment
+
+The bot is deployed with [Fly.io](https://fly.io/). 
+
+#### Secrets
+
+Set [secrets](https://fly.io/docs/reference/secrets/) for the `CLIENT_ID`, `CLIENT_SECRET`, and `REFRESH_TOKEN` variables from `praw.ini`.
+
+```sh
+fly secrets set MY_VAR=xxxxxxxx --stage
+```
+
+#### Volume
+
+Create the [volume](https://fly.io/docs/apps/volume-storage/) `community_chess_db`. 
+
+```sh
+fly volumes create community_chess_db -r sea -n 1 -s 1
+```
+
+#### Publish
+
+```sh
+# High availability creates unnecessary extra machines
+fly deploy --ha=false
 ```
