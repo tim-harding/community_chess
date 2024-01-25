@@ -416,7 +416,11 @@ async def make_post(
     os.remove(path)
     match post:
         case Submission():
-            await post.reply(f"PGN:\n{board_pgn(board)}\n\nFEN:\n\n{board.fen()}")
+            comment = await post.reply(
+                f"PGN:\n\n{board_pgn(board)}\n\nFEN:\n\n{board.fen()}"
+            )
+            if comment is not None:
+                await comment.mod.distinguish(sticky=True)
             database.insert_post(post.id, database.current_game())
             return post
         case None:
