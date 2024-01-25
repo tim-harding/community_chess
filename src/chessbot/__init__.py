@@ -283,9 +283,9 @@ def reply_for_comment(comment: str, board: Board) -> str:
     match res:
         case MoveNormal(move, draw_offer):
             if draw_offer:
-                return f"I found the move {move} in your comment."
-            else:
                 return f"I found the move {move} with a draw offer in your comment."
+            else:
+                return f"I found the move {move} in your comment."
         case MoveResign():
             return "I found the suggestion to resign in your comment."
         case None:
