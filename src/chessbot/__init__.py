@@ -307,9 +307,9 @@ async def play_move(
         case None:
             return None
         case MoveNormal():
-            database.insert_move(move)
             board.push(move.move)
             outcome = outcome_for_move(move, board)
+            database.insert_move(move)
             match outcome:
                 case Outcome.ONGOING:
                     pass

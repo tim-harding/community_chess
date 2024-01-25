@@ -31,7 +31,7 @@ class TestMoves(unittest.TestCase):
             MoveNormal(chess.Move(chess.E2, chess.E4), False),
         )
         self.assertEqual(
-            move_for_comment("  nf3  \nShould we resign?", Board()),
+            move_for_comment("  nf3, should we resign?", Board()),
             MoveNormal(chess.Move(chess.G1, chess.F3), False),
         )
 
@@ -41,7 +41,7 @@ class TestMoves(unittest.TestCase):
             MoveNormal(chess.Move(chess.E2, chess.E4), True),
         )
         self.assertEqual(
-            move_for_comment("Nf3 draw", Board()),
+            move_for_comment("Nf3 draw, this is drawish", Board()),
             MoveNormal(chess.Move(chess.G1, chess.F3), True),
         )
 
@@ -58,6 +58,8 @@ class TestMoves(unittest.TestCase):
 
     def test_resign(self):
         self.assertEqual(move_for_comment("resign", Board()), MoveResign())
+
+    # TODO: test mate, check annotations
 
 
 if __name__ == "__main__":
