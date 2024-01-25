@@ -1,4 +1,4 @@
-from enum import Enum, auto
+from enum import IntEnum, auto
 from .moves import (
     MoveErrorAmbiguous,
     MoveErrorIllegal,
@@ -33,7 +33,7 @@ from typing import NamedTuple, assert_never
 from datetime import timedelta, datetime, UTC
 
 
-class Player(Enum):
+class Player(IntEnum):
     WHITE = auto()
     BLACK = auto()
 
@@ -78,6 +78,11 @@ class ScheduleUtc(NamedTuple):
 Schedule = ScheduleTimeout | ScheduleUtc
 
 
+class AuthMethod(IntEnum):
+    PRAW = auto()
+    ENV = auto()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="CommunityChess Server")
 
@@ -117,6 +122,16 @@ def main() -> None:
         help="The file to use for the sqlite database",
     )
 
+    parser.add_argument(
+        "-a",
+        "--auth-method",
+        type=str,
+        choices=["praw", "env"],
+        default="praw",
+        metavar="METHOD",
+        help="Whether to use praw.ini or environment variables for Reddit authentication",
+    )
+
     args = parser.parse_args()
     logging.basicConfig(level=args.log)
     database.open_db(args.database)
@@ -131,13 +146,32 @@ def main() -> None:
     if args.timeout:
         schedule = ScheduleTimeout(args.timeout)
 
+    match args.auth_method:
+        case "praw":
+            auth_method = AuthMethod.PRAW
+        case "env":
+            auth_method = AuthMethod.ENV
+        case _:
+            raise Exception("Invalid auth method")
+
     logging.info("About to run async_main")
-    asyncio.run(async_main(schedule))
+    asyncio.run(async_main(schedule, auth_method))
 
 
-async def async_main(schedule: Schedule) -> None:
+async def async_main(schedule: Schedule, auth_method: AuthMethod) -> None:
     logging.info("Entering async_main")
-    reddit = Reddit()
+
+    match auth_method:
+        case AuthMethod.PRAW:
+            reddit = Reddit()
+        case AuthMethod.ENV:
+            reddit = Reddit(
+                client_id=os.environ["CLIENT_ID"],
+                client_secret=os.environ["CLIENT_SECRET"],
+                refresh_token=os.environ["REFRESH_TOKEN"],
+                user_agent=os.environ["USER_AGENT"],
+            )
+
     queue: MsgQueue = Queue()
     tasks = []
     try:
