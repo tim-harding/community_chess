@@ -44,7 +44,7 @@ class MoveErrorIllegal(Exception):
 
 
 _MOVE_PATTERN: Final = re.compile(
-    r"([Rr][Ee][Ss][Ii][Gg][Nn])|(?:([Oo0](?:-[Oo0]){1,2}|[KQRBNkqrbn]?[a-h]?[1-8]?x?[a-h][1-8](?:\=[QRBNqrbn])?[+#]?)|([a-h][1-8][a-h][1-8][kqrbn]?))( [Dd][Rr][Aa][Ww])?"
+    r"^ *(?:([Rr][Ee][Ss][Ii][Gg][Nn])|(?:([Oo0](?:-[Oo0]){1,2}|[KQRBNkqrbn]?[a-h]?[1-8]?x?[a-h][1-8](?:\=[QRBNqrbn])?[+#]?)|([a-h][1-8][a-h][1-8][KQRBNkqrbn]?))( +[Dd][Rr][Aa][Ww])?)"
 )
 
 

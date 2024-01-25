@@ -27,7 +27,7 @@ class TestMoves(unittest.TestCase):
 
     def test_found_multiline(self):
         self.assertEqual(
-            move_for_comment("e4\nThis move seems good", Board()),
+            move_for_comment("e4 looks good", Board()),
             MoveNormal(chess.Move(chess.E2, chess.E4), False),
         )
         self.assertEqual(
@@ -58,7 +58,6 @@ class TestMoves(unittest.TestCase):
 
     def test_resign(self):
         self.assertEqual(move_for_comment("resign", Board()), MoveResign())
-
 
 
 if __name__ == "__main__":
