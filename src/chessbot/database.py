@@ -1,6 +1,7 @@
 from enum import IntEnum, auto
 import sqlite3
 from sqlite3.dbapi2 import Connection
+import os
 
 import chess
 from .moves import MoveNormal
@@ -29,9 +30,36 @@ class NoRowsException(Exception):
 _DB: Connection | None = None
 
 
-def open_db(path: str) -> None:
+def open_db(path: str, reset: bool = False) -> None:
+    if reset:
+        os.remove(path)
+
     global _DB
     _DB = sqlite3.connect(path)
+    _DB.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game(
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            outcome INTEGER CHECK(outcome >= 1 AND outcome <= 7) DEFAULT 1 NOT NULL
+        )
+
+        CREATE TABLE IF NOT EXISTS move(
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            uci TEXT NOT NULL,
+            draw_offer INTEGER NOT NULL,
+            game INTEGER NOT NULL,
+            FOREIGN KEY(game) REFERENCES game(id)
+        )
+
+        CREATE TABLE IF NOT EXISTS post(
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            reddit_id TEXT NOT NULL,
+            game INTEGER NOT NULL,
+            FOREIGN KEY(game) REFERENCES game(id)
+        )
+        """
+    )
+    _DB.commit()
 
 
 def set_game_outcome(outcome: Outcome) -> None:
@@ -100,40 +128,3 @@ def moves() -> list[MoveNormal]:
             case _:
                 raise ResponseFormatException()
     return out
-
-
-def prepare() -> None:
-    assert _DB is not None
-    for outcome in Outcome:
-        assert outcome >= 1 and outcome <= 7
-
-    _DB.execute(
-        """
-        CREATE TABLE IF NOT EXISTS game(
-            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-            outcome INTEGER CHECK(outcome >= 1 AND outcome <= 6) DEFAULT 1 NOT NULL
-        )
-        """
-    )
-    _DB.execute(
-        """
-        CREATE TABLE IF NOT EXISTS move(
-            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-            uci TEXT NOT NULL,
-            draw_offer INTEGER NOT NULL,
-            game INTEGER NOT NULL,
-            FOREIGN KEY(game) REFERENCES game(id)
-        )
-        """
-    )
-    _DB.execute(
-        """
-        CREATE TABLE IF NOT EXISTS post(
-            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-            reddit_id TEXT NOT NULL,
-            game INTEGER NOT NULL,
-            FOREIGN KEY(game) REFERENCES game(id)
-        )
-        """
-    )
-    _DB.commit()

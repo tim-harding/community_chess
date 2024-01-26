@@ -10,6 +10,7 @@ from . import database
 from .database import NoRowsException, Outcome
 
 from asyncpraw.reddit import Reddit
+from asyncpraw.models.reddit.subreddit import Subreddit
 from asyncpraw.models.reddit.submission import Submission
 from asyncpraw.models.reddit.comment import Comment
 
@@ -143,7 +144,6 @@ def main() -> None:
     logging.basicConfig(level=args.log)
     database.open_db(args.database)
 
-    database.prepare()
     try:
         database.current_game()
     except NoRowsException:
@@ -166,7 +166,7 @@ def main() -> None:
 
 
 async def async_main(
-    schedule: Schedule, auth_method: AuthMethod, subreddit: str
+    schedule: Schedule, auth_method: AuthMethod, subreddit_name: str
 ) -> None:
     logging.info("Entering async_main")
 
@@ -181,14 +181,20 @@ async def async_main(
                 user_agent=os.environ["USER_AGENT"],
             )
 
+    try:
+        subreddit = await reddit.subreddit(subreddit_name)
+    except CancelledError:
+        logging.info("Cancelling forward_comments")
+        return
+
     queue: MsgQueue = Queue()
     tasks = []
     try:
         async with asyncio.TaskGroup() as group:
             tasks = [
                 group.create_task(send_play_move_notifications(queue, schedule)),
-                group.create_task(forward_comments(reddit, queue)),
-                group.create_task(handle_messages(reddit, queue)),
+                group.create_task(forward_comments(subreddit, queue)),
+                group.create_task(handle_messages(reddit, subreddit, queue)),
             ]
     except CancelledError:
         for task in tasks:
@@ -196,7 +202,9 @@ async def async_main(
         await reddit.close()
 
 
-async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
+async def handle_messages(
+    reddit: Reddit, subreddit: Subreddit, queue: MsgQueue
+) -> None:
     logging.info("entered handle_messages")
 
     board = Board()
@@ -208,7 +216,7 @@ async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
         database.last_post()
     except NoRowsException:
         logging.info("Making initial post")
-        await make_post(reddit, board, Outcome.ONGOING)
+        await make_post(subreddit, board, Outcome.ONGOING)
 
     try:
         current_post = await reddit.submission(database.last_post())
@@ -227,7 +235,7 @@ async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
         match msg:
             case NotifyPlayMove():
                 try:
-                    post = await play_move(reddit, board, current_post)
+                    post = await play_move(subreddit, board, current_post)
                 except CancelledError:
                     logging.info("Cancelling handle_messages")
                     break
@@ -247,16 +255,9 @@ async def handle_messages(reddit: Reddit, queue: MsgQueue) -> None:
                 logging.info(f"Responded to comment '{comment.body}' with '{reply}'")
 
 
-async def forward_comments(reddit: Reddit, queue: MsgQueue) -> None:
+async def forward_comments(subreddit: Subreddit, queue: MsgQueue) -> None:
     logging.info("entered forward_comments")
-
-    try:
-        sub = await reddit.subreddit("CommunityChess")
-    except CancelledError:
-        logging.info("Cancelling forward_comments")
-        return
-
-    async for comment in sub.stream.comments(skip_existing=True):
+    async for comment in subreddit.stream.comments(skip_existing=True):
         TOP_LEVEL_COMMENT_PREFIX = "t3_"
         is_top_level = comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX
         is_current_post = comment.parent_id[3:] == database.last_post()
@@ -306,7 +307,7 @@ def reply_for_comment(comment: str, board: Board) -> str:
 
 
 async def play_move(
-    reddit: Reddit, board: Board, post: Submission
+    subreddit: Subreddit, board: Board, post: Submission
 ) -> Submission | None:
     move = await select_move(board, post)
     logging.info(f"Playing move {move}")
@@ -321,12 +322,12 @@ async def play_move(
                 case Outcome.ONGOING:
                     pass
                 case _:
-                    await new_game(reddit, board, outcome)
+                    await new_game(subreddit, board, outcome)
         case MoveResign():
-            await new_game(reddit, board, resignation_for_board(board))
+            await new_game(subreddit, board, resignation_for_board(board))
         case _:
             assert_never(move)
-    return await make_post(reddit, board, Outcome.ONGOING)
+    return await make_post(subreddit, board, Outcome.ONGOING)
 
 
 def resignation_for_board(board: Board) -> Outcome:
@@ -340,8 +341,8 @@ def resignation_for_board(board: Board) -> Outcome:
             assert_never(player)
 
 
-async def new_game(reddit: Reddit, board: Board, outcome: Outcome) -> None:
-    await make_post(reddit, board, outcome)
+async def new_game(subreddit: Subreddit, board: Board, outcome: Outcome) -> None:
+    await make_post(subreddit, board, outcome)
     database.set_game_outcome(outcome)
     database.insert_game()
     board.reset()
@@ -411,15 +412,14 @@ async def select_move(board: Board, post: Submission) -> MoveNormal | MoveResign
 
 
 async def make_post(
-    reddit: Reddit, board: Board, outcome: Outcome
+    subreddit: Subreddit, board: Board, outcome: Outcome
 ) -> Submission | None:
     _, path = tempfile.mkstemp(".png")
     svg = chess.svg.board(board, size=1024)
     cairosvg.svg2png(svg, write_to=path)
 
     title = title_for_outcome(outcome, board.ply())
-    sub = await reddit.subreddit("CommunityChess")
-    post = await sub.submit_image(title, path)
+    post = await subreddit.submit_image(title, path)
     os.remove(path)
     match post:
         case Submission():
