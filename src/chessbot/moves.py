@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from enum import IntEnum, auto
 import re
 from typing import Any, Final, NamedTuple, assert_never
 import chess
@@ -18,35 +19,32 @@ class MoveResign:
 Move = MoveNormal | MoveResign
 
 
-class MoveErrorAmbiguous(Exception):
-    move_text: str
+class MoveErrorKind(IntEnum):
+    AMBIGUOUS = auto()
+    ILLEGAL = auto()
 
-    def __init__(self, move_text: str) -> None:
+    def __str__(self) -> str:
+        match self:
+            case MoveErrorKind.AMBIGUOUS:
+                return "ambiguous"
+            case MoveErrorKind.ILLEGAL:
+                return "ILLEGAL"
+
+
+class MoveError(Exception):
+    move_text: str
+    kind: MoveErrorKind
+
+    def __init__(self, move_text: str, kind: MoveErrorKind) -> None:
         self.move_text = move_text
+        self.kind = kind
 
     def __eq__(self, other: Any) -> bool:
         match other:
-            case MoveErrorAmbiguous():
-                return self.move_text == other.move_text
+            case MoveError():
+                return self.move_text == other.move_text and self.kind == other.kind
             case _:
                 return False
-
-
-class MoveErrorIllegal(Exception):
-    move_text: str
-
-    def __init__(self, move_text: str) -> None:
-        self.move_text = move_text
-
-    def __eq__(self, other: Any) -> bool:
-        match other:
-            case MoveErrorIllegal():
-                return self.move_text == other.move_text
-            case _:
-                return False
-
-
-MoveError = MoveErrorAmbiguous | MoveErrorIllegal
 
 
 _MOVE_PATTERN: Final = re.compile(
@@ -116,6 +114,6 @@ def _try_parse_move(
     except chess.InvalidMoveError:
         return None
     except chess.AmbiguousMoveError:
-        return MoveErrorAmbiguous(move_text)
+        return MoveError(move_text, MoveErrorKind.AMBIGUOUS)
     except chess.IllegalMoveError:
-        return MoveErrorIllegal(move_text)
+        return MoveError(move_text, MoveErrorKind.ILLEGAL)

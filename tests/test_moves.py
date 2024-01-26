@@ -1,10 +1,10 @@
 import unittest
 from chessbot.moves import (
+    MoveError,
+    MoveErrorKind,
     MoveResign,
     move_for_comment,
     MoveNormal,
-    MoveErrorIllegal,
-    MoveErrorAmbiguous,
 )
 import chess
 from chess import Board
@@ -46,7 +46,9 @@ class TestMoves(unittest.TestCase):
         )
 
     def test_illegal(self):
-        self.assertEqual(move_for_comment("ke2", Board()), MoveErrorIllegal("Ke2"))
+        self.assertEqual(
+            move_for_comment("ke2", Board()), MoveError("Ke2", MoveErrorKind.ILLEGAL)
+        )
 
     def test_ambiguous(self):
         board = Board()
@@ -54,7 +56,9 @@ class TestMoves(unittest.TestCase):
         board.push_san("e6")
         board.push_san("Nc3")
         board.push_san("e5")
-        self.assertEqual(move_for_comment("Ne2", board), MoveErrorAmbiguous("Ne2"))
+        self.assertEqual(
+            move_for_comment("Ne2", board), MoveError("Ne2", MoveErrorKind.AMBIGUOUS)
+        )
 
     def test_resign(self):
         self.assertEqual(move_for_comment("resign", Board()), MoveResign())

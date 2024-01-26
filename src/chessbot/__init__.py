@@ -1,7 +1,6 @@
 from enum import IntEnum, auto
 from .moves import (
-    MoveErrorAmbiguous,
-    MoveErrorIllegal,
+    MoveError,
     MoveNormal,
     MoveResign,
     move_for_comment,
@@ -300,10 +299,8 @@ def reply_for_comment(comment: str, board: Board) -> str:
             return "I found the suggestion to resign in your comment."
         case None:
             return "I did not find a valid move in your comment. Make sure to put valid SAN or UCI notation in the first line to suggest a move."
-        case MoveErrorAmbiguous():
-            return f"The move {res.move_text} is ambiguous."
-        case MoveErrorIllegal():
-            return f"The move {res.move_text} is illegal."
+        case MoveError():
+            return f"The move {res.move_text} is {res.kind}."
         case _:
             assert_never(res)
 
@@ -406,7 +403,7 @@ async def select_move(board: Board, post: Submission) -> MoveNormal | MoveResign
                 case MoveNormal() | MoveResign():
                     selected = move
                     top_score = comment.score
-                case None | MoveErrorAmbiguous() | MoveErrorIllegal():
+                case None | MoveError():
                     pass
                 case _:
                     assert_never(move)
