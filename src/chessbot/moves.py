@@ -15,6 +15,9 @@ class MoveResign:
         return isinstance(other, MoveResign)
 
 
+Move = MoveNormal | MoveResign
+
+
 class MoveErrorAmbiguous(Exception):
     move_text: str
 
@@ -43,6 +46,9 @@ class MoveErrorIllegal(Exception):
                 return False
 
 
+MoveError = MoveErrorAmbiguous | MoveErrorIllegal
+
+
 _MOVE_PATTERN: Final = re.compile(
     r"^ *(?:([Rr][Ee][Ss][Ii][Gg][Nn])|(?:([Oo0](?:-[Oo0]){1,2}|[KQRBNkqrbn]?[a-h]?[1-8]?x?[a-h][1-8](?:\=[QRBNqrbn])?[+#]?)|([a-h][1-8][a-h][1-8][KQRBNkqrbn]?))( +[Dd][Rr][Aa][Ww])?)"
 )
@@ -51,7 +57,7 @@ _MOVE_PATTERN: Final = re.compile(
 def move_for_comment(
     comment: str,
     board: Board,
-) -> MoveNormal | MoveResign | MoveErrorIllegal | MoveErrorAmbiguous | None:
+) -> Move | MoveError | None:
     first_line = comment.partition("\n")[0]
     m = _MOVE_PATTERN.search(first_line)
     match m:
@@ -79,7 +85,7 @@ def _san_move(
     board: Board,
     san: str,
     offer_draw: bool,
-) -> MoveNormal | MoveErrorIllegal | MoveErrorAmbiguous | None:
+) -> MoveNormal | MoveError | None:
     san = (
         san.replace("k", "K")
         .replace("q", "Q")
@@ -95,7 +101,7 @@ def _uci_move(
     board: Board,
     uci: str,
     offer_draw: bool,
-) -> MoveNormal | MoveErrorIllegal | MoveErrorAmbiguous | None:
+) -> MoveNormal | MoveError | None:
     return _try_parse_move(Board.parse_uci, board, uci, offer_draw)
 
 
@@ -104,7 +110,7 @@ def _try_parse_move(
     board: Board,
     move_text: str,
     offer_draw: bool,
-) -> MoveNormal | MoveErrorIllegal | MoveErrorAmbiguous | None:
+) -> MoveNormal | MoveError | None:
     try:
         return MoveNormal(f(board, move_text), offer_draw)
     except chess.InvalidMoveError:

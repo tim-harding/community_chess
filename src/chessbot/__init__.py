@@ -132,6 +132,14 @@ def main() -> None:
         help="Whether to use praw.ini or environment variables for Reddit authentication",
     )
 
+    parser.add_argument(
+        "-s",
+        "--subreddit",
+        type=str,
+        metavar="NAME",
+        help="The subreddit to make posts in",
+    )
+
     args = parser.parse_args()
     logging.basicConfig(level=args.log)
     database.open_db(args.database)
@@ -155,10 +163,12 @@ def main() -> None:
             raise Exception("Invalid auth method")
 
     logging.info("About to run async_main")
-    asyncio.run(async_main(schedule, auth_method))
+    asyncio.run(async_main(schedule, auth_method, args.subreddit))
 
 
-async def async_main(schedule: Schedule, auth_method: AuthMethod) -> None:
+async def async_main(
+    schedule: Schedule, auth_method: AuthMethod, subreddit: str
+) -> None:
     logging.info("Entering async_main")
 
     match auth_method:
