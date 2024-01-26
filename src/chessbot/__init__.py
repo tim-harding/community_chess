@@ -213,13 +213,13 @@ async def handle_messages(
 
     try:
         logging.info("Checking for last post existence")
-        database.last_post()
+        database.last_post_for_game()
     except NoRowsException:
         logging.info("Making initial post")
         await make_post(subreddit, board, Outcome.ONGOING)
 
     try:
-        current_post = await reddit.submission(database.last_post())
+        current_post = await reddit.submission(database.last_post_for_game())
     except CancelledError:
         logging.info("Cancelling handle_messages")
         return
@@ -260,7 +260,7 @@ async def forward_comments(subreddit: Subreddit, queue: MsgQueue) -> None:
     async for comment in subreddit.stream.comments(skip_existing=True):
         TOP_LEVEL_COMMENT_PREFIX = "t3_"
         is_top_level = comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX
-        is_current_post = comment.parent_id[3:] == database.last_post()
+        is_current_post = comment.parent_id[3:] == database.last_post_for_game()
         if is_top_level and is_current_post and not comment.is_submitter:
             logging.info("Sending comment")
             try:
@@ -428,7 +428,7 @@ async def make_post(
             )
             if comment is not None:
                 await comment.mod.distinguish(sticky=True)
-            database.insert_post(post.id, database.current_game())
+            database.insert_post(post.id)
             return post
         case None:
             logging.error("Failed to make a post")

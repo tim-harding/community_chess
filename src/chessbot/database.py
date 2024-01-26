@@ -32,7 +32,10 @@ _DB: Connection | None = None
 
 def open_db(path: str, reset: bool = False) -> None:
     if reset:
-        os.remove(path)
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
 
     global _DB
     _DB = sqlite3.connect(path)
@@ -42,7 +45,10 @@ def open_db(path: str, reset: bool = False) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
             outcome INTEGER CHECK(outcome >= 1 AND outcome <= 7) DEFAULT 1 NOT NULL
         )
-
+        """
+    )
+    _DB.execute(
+        """
         CREATE TABLE IF NOT EXISTS move(
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
             uci TEXT NOT NULL,
@@ -50,7 +56,10 @@ def open_db(path: str, reset: bool = False) -> None:
             game INTEGER NOT NULL,
             FOREIGN KEY(game) REFERENCES game(id)
         )
-
+        """
+    )
+    _DB.execute(
+        """
         CREATE TABLE IF NOT EXISTS post(
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
             reddit_id TEXT NOT NULL,
@@ -65,7 +74,11 @@ def open_db(path: str, reset: bool = False) -> None:
 def set_game_outcome(outcome: Outcome) -> None:
     assert _DB is not None
     _DB.execute(
-        "UPDATE game SET outcome = ? WHERE id = (SELECT MAX(id) FROM game)",
+        """
+        UPDATE game 
+        SET outcome = ? 
+        WHERE id = (SELECT MAX(id) FROM game)
+        """,
         (int(outcome),),
     )
     _DB.commit()
@@ -89,15 +102,29 @@ def current_game() -> int:
             raise ResponseFormatException()
 
 
-def insert_post(reddit_id: str, game: int) -> None:
+def insert_post(reddit_id: str) -> None:
     assert _DB is not None
-    _DB.execute("INSERT INTO post (reddit_id, game) VALUES (?, ?)", (reddit_id, game))
+    _DB.execute(
+        """
+        INSERT INTO post (reddit_id, game) 
+        VALUES (?, (SELECT MAX(id) FROM game))
+        """,
+        (reddit_id,),
+    )
     _DB.commit()
 
 
-def last_post() -> str:
+def last_post_for_game() -> str:
     assert _DB is not None
-    res = _DB.execute("SELECT reddit_id FROM post ORDER BY id DESC LIMIT 1")
+    res = _DB.execute(
+        """
+        SELECT reddit_id 
+        FROM post 
+        WHERE game = (SELECT MAX(id) FROM game) 
+        ORDER BY id DESC 
+        LIMIT 1
+        """
+    )
     match res.fetchone():
         case (str() as id,):
             return id
@@ -110,7 +137,10 @@ def last_post() -> str:
 def insert_move(move: MoveNormal) -> None:
     assert _DB is not None
     _DB.execute(
-        "INSERT INTO move(uci, draw_offer, game) VALUES (?, ?, (SELECT MAX(id) FROM game))",
+        """
+        INSERT INTO move(uci, draw_offer, game) 
+        VALUES (?, ?, (SELECT MAX(id) FROM game))
+        """,
         (move.move.uci(), int(move.offer_draw)),
     )
     _DB.commit()
@@ -120,7 +150,11 @@ def moves() -> list[MoveNormal]:
     assert _DB is not None
     out: list[MoveNormal] = []
     for row in _DB.execute(
-        "SELECT uci, draw_offer FROM move WHERE game = (SELECT MAX(id) FROM game)"
+        """
+        SELECT uci, draw_offer 
+        FROM move 
+        WHERE game = (SELECT MAX(id) FROM game)
+        """
     ):
         match row:
             case (str() as uci, int() as draw_offer):
