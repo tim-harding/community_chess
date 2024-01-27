@@ -7,7 +7,7 @@ from .moves import (
 )
 
 from . import database
-from .database import NoRowsException, Outcome
+from .database import NoInitialPostException, Outcome
 
 from asyncpraw.reddit import Reddit
 from asyncpraw.models.reddit.subreddit import Subreddit
@@ -43,8 +43,6 @@ class Player(IntEnum):
                 return "white"
             case Player.BLACK:
                 return "black"
-            case _:
-                assert_never(self)
 
 
 class NotifyPlayMove:
@@ -81,6 +79,11 @@ Schedule = ScheduleTimeout | ScheduleUtc
 class AuthMethod(IntEnum):
     PRAW = auto()
     ENV = auto()
+
+
+class MakePostException(Exception):
+    def __init__(self) -> None:
+        super().__init__("Failed to make a post")
 
 
 def main() -> None:
@@ -142,12 +145,6 @@ def main() -> None:
 
     args = parser.parse_args()
     logging.basicConfig(level=args.log)
-    database.open_db(args.database)
-
-    try:
-        database.current_game()
-    except NoRowsException:
-        database.insert_game()
 
     schedule: Schedule = ScheduleUtc(args.utc)
     if args.timeout:
@@ -162,11 +159,11 @@ def main() -> None:
             raise Exception("Invalid auth method")
 
     logging.info("About to run async_main")
-    asyncio.run(async_main(schedule, auth_method, args.subreddit))
+    asyncio.run(async_main(schedule, auth_method, args.subreddit, args.database))
 
 
 async def async_main(
-    schedule: Schedule, auth_method: AuthMethod, subreddit_name: str
+    schedule: Schedule, auth_method: AuthMethod, subreddit_name: str, database_name: str
 ) -> None:
     logging.info("Entering async_main")
 
@@ -194,7 +191,9 @@ async def async_main(
             tasks = [
                 group.create_task(send_play_move_notifications(queue, schedule)),
                 group.create_task(forward_comments(subreddit, queue)),
-                group.create_task(handle_messages(reddit, subreddit, queue)),
+                group.create_task(
+                    handle_messages(reddit, subreddit, database_name, queue)
+                ),
             ]
     except CancelledError:
         for task in tasks:
@@ -203,75 +202,56 @@ async def async_main(
 
 
 async def handle_messages(
-    reddit: Reddit, subreddit: Subreddit, queue: MsgQueue
+    reddit: Reddit, subreddit: Subreddit, database_name: str, queue: MsgQueue
 ) -> None:
-    logging.info("entered handle_messages")
-
+    logging.info("Entered handle_messages")
     board = Board()
+
+    try:
+        database.open(database_name)
+    except NoInitialPostException:
+        await make_post(subreddit, board, Outcome.ONGOING)
+
     for move in database.moves():
         board.push(move.move)
 
-    try:
-        logging.info("Checking for last post existence")
-        database.last_post_for_game()
-    except NoRowsException:
-        logging.info("Making initial post")
-        await make_post(subreddit, board, Outcome.ONGOING)
-
-    try:
-        current_post = await reddit.submission(database.last_post_for_game())
-    except CancelledError:
-        logging.info("Cancelling handle_messages")
-        return
-
-    logging.info("Entering message queue loop")
     while True:
         try:
             msg = await queue.get()
         except CancelledError:
-            logging.info("Cancelling handle_messages")
             break
 
         match msg:
             case NotifyPlayMove():
                 try:
-                    post = await play_move(subreddit, board, current_post)
+                    await play_move(reddit, subreddit, board)
                 except CancelledError:
-                    logging.info("Cancelling handle_messages")
                     break
 
-                match post:
-                    case None:
-                        pass
-                    case Submission() as post:
-                        current_post = post
             case Comment() as comment:
                 reply = reply_for_comment(comment.body, board)
                 try:
                     await comment.reply(reply)
                 except CancelledError:
-                    logging.info("Cancelling handle_messages")
                     break
                 logging.info(f"Responded to comment '{comment.body}' with '{reply}'")
 
 
 async def forward_comments(subreddit: Subreddit, queue: MsgQueue) -> None:
-    logging.info("entered forward_comments")
+    logging.info("Entered forward_comments")
     async for comment in subreddit.stream.comments(skip_existing=True):
         TOP_LEVEL_COMMENT_PREFIX = "t3_"
         is_top_level = comment.parent_id[:3] == TOP_LEVEL_COMMENT_PREFIX
-        is_current_post = comment.parent_id[3:] == database.last_post_for_game()
-        if is_top_level and is_current_post and not comment.is_submitter:
+        if is_top_level and not comment.is_submitter:
             logging.info("Sending comment")
             try:
                 await queue.put(comment)
             except CancelledError:
-                logging.info("Cancelling forward_comments")
                 break
 
 
 async def send_play_move_notifications(queue: MsgQueue, schedule: Schedule) -> None:
-    logging.info("entered send_play_move_notifications")
+    logging.info("Entered send_play_move_notifications")
     while True:
         seconds = schedule.next_post_seconds()
         logging.info(f"Next post scheduled in {seconds} seconds")
@@ -280,6 +260,7 @@ async def send_play_move_notifications(queue: MsgQueue, schedule: Schedule) -> N
         except CancelledError:
             logging.info("Cancelling send_play_move_notifications")
             break
+
         logging.info("Sending play move notification")
         try:
             await queue.put(NotifyPlayMove())
@@ -302,32 +283,54 @@ def reply_for_comment(comment: str, board: Board) -> str:
             return "I did not find a valid move in your comment. Make sure to put valid SAN or UCI notation in the first line to suggest a move."
         case MoveError():
             return f"The move {res.move_text} is {res.kind}."
-        case _:
-            assert_never(res)
 
 
-async def play_move(
-    subreddit: Subreddit, board: Board, post: Submission
-) -> Submission | None:
-    move = await select_move(board, post)
+async def play_move(reddit: Reddit, subreddit: Subreddit, board: Board) -> None:
+    last_post = reddit.submission(database.last_post_for_game())
+    assert isinstance(last_post, Submission)
+    move = await select_move(board, last_post)
     logging.info(f"Playing move {move}")
     match move:
         case None:
             return None
+
         case MoveNormal():
             board.push(move.move)
             outcome = outcome_for_move(move, board)
-            database.insert_move(move)
             match outcome:
                 case Outcome.ONGOING:
-                    pass
-                case _:
-                    await new_game(subreddit, board, outcome)
+                    try:
+                        next_post = await make_post(subreddit, board, Outcome.ONGOING)
+                    except MakePostException:
+                        logging.error(f"Failed to make post for move {move}")
+                        board.pop()
+                        return
+
+                    database.insert_post(next_post.id)
+
+                case (
+                    Outcome.DRAW
+                    | Outcome.STALEMATE
+                    | Outcome.VICTORY_WHITE
+                    | Outcome.VICTORY_BLACK
+                ):
+                    try:
+                        await new_game(subreddit, board, outcome)
+                    except MakePostException:
+                        logging.error(f"Failed to make post for move {move}")
+                        board.pop()
+                        return
+
+                    board.reset()
+
+                case Outcome.RESIGNATION_WHITE | Outcome.RESIGNATION_BLACK:
+                    raise Exception("Unreachable")
+
         case MoveResign():
-            await new_game(subreddit, board, resignation_for_board(board))
-        case _:
-            assert_never(move)
-    return await make_post(subreddit, board, Outcome.ONGOING)
+            try:
+                await new_game(subreddit, board, resignation_for_board(board))
+            except MakePostException:
+                logging.error(f"Failed to make post for move {move}")
 
 
 def resignation_for_board(board: Board) -> Outcome:
@@ -337,15 +340,12 @@ def resignation_for_board(board: Board) -> Outcome:
             return Outcome.RESIGNATION_WHITE
         case Player.BLACK:
             return Outcome.RESIGNATION_BLACK
-        case _:
-            assert_never(player)
 
 
 async def new_game(subreddit: Subreddit, board: Board, outcome: Outcome) -> None:
-    await make_post(subreddit, board, outcome)
-    database.set_game_outcome(outcome)
-    database.insert_game()
-    board.reset()
+    final_post = await make_post(subreddit, board, outcome)
+    first_post = await make_post(subreddit, Board(), Outcome.ONGOING)
+    database.new_game(final_post.id, outcome, first_post.id)
 
 
 def outcome_for_move(move: MoveNormal, board: Board) -> Outcome:
@@ -371,8 +371,6 @@ def outcome_for_board(board: Board) -> Outcome:
                             return Outcome.VICTORY_BLACK
                         case None:
                             raise Exception("Expected a winner")
-                        case _:
-                            assert_never(outcome.winner)
                 case Termination.STALEMATE:
                     return Outcome.STALEMATE
                 case (
@@ -389,8 +387,6 @@ def outcome_for_board(board: Board) -> Outcome:
                     | Termination.VARIANT_DRAW
                 ):
                     raise Exception("Unexpected variant termination")
-                case _:
-                    assert_never(outcome.termination)
 
 
 async def select_move(board: Board, post: Submission) -> MoveNormal | MoveResign | None:
@@ -398,22 +394,19 @@ async def select_move(board: Board, post: Submission) -> MoveNormal | MoveResign
     selected = None
     await post.load()  # type: ignore
     async for comment in post.comments:
-        if comment.score > top_score:
-            move = move_for_comment(comment.body, board)
-            match move:
-                case MoveNormal() | MoveResign():
-                    selected = move
-                    top_score = comment.score
-                case None | MoveError():
-                    pass
-                case _:
-                    assert_never(move)
+        if comment.score <= top_score:
+            continue
+        move = move_for_comment(comment.body, board)
+        match move:
+            case MoveNormal() | MoveResign():
+                selected = move
+                top_score = comment.score
+            case None | MoveError():
+                pass
     return selected
 
 
-async def make_post(
-    subreddit: Subreddit, board: Board, outcome: Outcome
-) -> Submission | None:
+async def make_post(subreddit: Subreddit, board: Board, outcome: Outcome) -> Submission:
     _, path = tempfile.mkstemp(".png")
     svg = chess.svg.board(board, size=1024)
     cairosvg.svg2png(svg, write_to=path)
@@ -426,13 +419,18 @@ async def make_post(
             comment = await post.reply(
                 f"PGN:\n\n{board_pgn(board)}\n\nFEN:\n\n{board.fen()}"
             )
-            if comment is not None:
-                await comment.mod.distinguish(sticky=True)
-            database.insert_post(post.id)
+
+            match comment:
+                case Comment():
+                    await comment.mod.distinguish(sticky=True)
+                case _:
+                    pass
+
             return post
+
         case None:
-            logging.error("Failed to make a post")
-            return None
+            raise MakePostException()
+
         case _:
             assert_never(post)
 

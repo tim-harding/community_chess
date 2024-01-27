@@ -27,10 +27,15 @@ class NoRowsException(Exception):
         super().__init__("Database response contains no rows")
 
 
+class NoInitialPostException(Exception):
+    def __init__(self) -> None:
+        super().__init__("The database does not contain an initial post")
+
+
 _DB: Connection | None = None
 
 
-def open_db(path: str, reset: bool = False) -> None:
+def open(path: str, reset: bool = False) -> None:
     if reset:
         try:
             os.remove(path)
@@ -39,25 +44,30 @@ def open_db(path: str, reset: bool = False) -> None:
 
     global _DB
     _DB = sqlite3.connect(path)
+
     _DB.execute(
         """
         CREATE TABLE IF NOT EXISTS game(
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-            outcome INTEGER CHECK(outcome >= 1 AND outcome <= 7) DEFAULT 1 NOT NULL
+            outcome INTEGER CHECK(outcome >= 1 AND outcome <= 7) DEFAULT 1 NOT NULL,
+            final_post INTEGER,
+            FOREIGN KEY(final_post) REFERENCES post(id)
         )
         """
     )
+
     _DB.execute(
         """
         CREATE TABLE IF NOT EXISTS move(
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
             uci TEXT NOT NULL,
             draw_offer INTEGER NOT NULL,
-            game INTEGER NOT NULL,
-            FOREIGN KEY(game) REFERENCES game(id)
+            post INTEGER NOT NULL,
+            FOREIGN KEY(post) REFERENCES post(id)
         )
         """
     )
+
     _DB.execute(
         """
         CREATE TABLE IF NOT EXISTS post(
@@ -68,50 +78,88 @@ def open_db(path: str, reset: bool = False) -> None:
         )
         """
     )
-    _DB.commit()
 
-
-def set_game_outcome(outcome: Outcome) -> None:
-    assert _DB is not None
-    _DB.execute(
+    # Populate a game if none exists
+    res = _DB.execute(
         """
-        UPDATE game 
-        SET outcome = ? 
-        WHERE id = (SELECT MAX(id) FROM game)
-        """,
-        (int(outcome),),
+        SELECT MAX(id) 
+        FROM game
+        """
     )
-    _DB.commit()
-
-
-def insert_game() -> None:
-    assert _DB is not None
-    _DB.execute("INSERT INTO game DEFAULT VALUES")
-    _DB.commit()
-
-
-def current_game() -> int:
-    assert _DB is not None
-    res = _DB.execute("SELECT MAX(id) FROM game")
     match res.fetchone():
-        case (int() as id,):
-            return id
+        case (int(),):
+            pass
         case (None,):
-            raise NoRowsException()
+            _DB.execute(
+                """
+                INSERT INTO game DEFAULT VALUES
+                """
+            )
         case _:
             raise ResponseFormatException()
 
+    res = _DB.execute(
+        """
+        SELECT MAX(id)
+        FROM post
+        """
+    )
+    match res.fetchone():
+        case (int(),):
+            pass
+        case (None,):
+            raise NoInitialPostException()
+        case _:
+            raise ResponseFormatException()
 
-def insert_post(reddit_id: str) -> None:
+    _DB.commit()
+
+
+def new_game(
+    previous_game_final_post: str,
+    previous_game_outcome: Outcome,
+    new_game_initial_post: str,
+) -> None:
+    assert _DB is not None
+    insert_post(previous_game_final_post, commit=False)
+    _DB.execute(
+        """
+        UPDATE game
+        SET outcome    = ?, 
+            final_post = ?
+        WHERE id = (
+            SELECT MAX(id) 
+            FROM game
+        )
+        """,
+        (int(previous_game_outcome), previous_game_final_post),
+    )
+    _DB.execute(
+        """
+        INSERT INTO game DEFAULT VALUES
+        """
+    )
+    insert_post(new_game_initial_post, commit=False)
+    _DB.commit()
+
+
+def insert_post(reddit_id: str, commit: bool = True) -> None:
     assert _DB is not None
     _DB.execute(
         """
         INSERT INTO post (reddit_id, game) 
-        VALUES (?, (SELECT MAX(id) FROM game))
+        VALUES (
+            ?, 
+            (
+                SELECT MAX(id) 
+                FROM game
+            )
+        )
         """,
         (reddit_id,),
     )
-    _DB.commit()
+    if commit:
+        _DB.commit()
 
 
 def last_post_for_game() -> str:
@@ -120,7 +168,10 @@ def last_post_for_game() -> str:
         """
         SELECT reddit_id 
         FROM post 
-        WHERE game = (SELECT MAX(id) FROM game) 
+        WHERE game = (
+            SELECT MAX(id) 
+            FROM game
+        )
         ORDER BY id DESC 
         LIMIT 1
         """
@@ -134,15 +185,30 @@ def last_post_for_game() -> str:
             raise ResponseFormatException()
 
 
-def insert_move(move: MoveNormal) -> None:
+def play_move(
+    move: MoveNormal,
+    next_post: str,
+) -> None:
     assert _DB is not None
     _DB.execute(
         """
-        INSERT INTO move(uci, draw_offer, game) 
-        VALUES (?, ?, (SELECT MAX(id) FROM game))
+        INSERT INTO move(uci, draw_offer, post) 
+        VALUES (
+            ?, 
+            ?, 
+            (
+                SELECT MAX(id) 
+                FROM post 
+                WHERE post.game = (
+                    SELECT MAX(id) 
+                    FROM game
+                )
+            )
+        )
         """,
         (move.move.uci(), int(move.offer_draw)),
     )
+    insert_post(next_post, commit=False)
     _DB.commit()
 
 
@@ -153,7 +219,12 @@ def moves() -> list[MoveNormal]:
         """
         SELECT uci, draw_offer 
         FROM move 
-        WHERE game = (SELECT MAX(id) FROM game)
+        INNER JOIN post
+        ON post.id = move.post
+        WHERE post.game = (
+            SELECT MAX(id) 
+            FROM game
+        )
         """
     ):
         match row:

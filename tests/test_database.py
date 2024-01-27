@@ -2,57 +2,45 @@ import unittest
 
 import chess
 from chessbot import database
+from chessbot.database import NoInitialPostException, Outcome
 from chessbot.moves import MoveNormal
 
 
 def clear() -> None:
-    database.open_db("test.db", reset=True)
+    try:
+        database.open("test.db", reset=True)
+    except NoInitialPostException:
+        database.insert_post("init")
 
 
 class TestDatabase(unittest.TestCase):
-    def test_no_initial_post(self) -> None:
-        clear()
-        self.assertRaises(database.NoRowsException, database.last_post_for_game)
-
-    def test_no_initial_game(self) -> None:
-        clear()
-        self.assertRaises(database.NoRowsException, database.current_game)
-
-    def test_initial_post_requires_game(self) -> None:
-        clear()
-        self.assertRaises(Exception, database.insert_post)
-
-    def test_game_insertions(self) -> None:
-        clear()
-        database.insert_game()
-        self.assertEqual(1, database.current_game())
-        database.insert_game()
-        self.assertEqual(2, database.current_game())
-
     def test_moves_for_game(self) -> None:
         clear()
         board = chess.Board()
         e4 = MoveNormal(board.push_san("e4"), False)
         e5 = MoveNormal(board.push_san("e5"), True)
-        database.insert_game()
-        database.insert_move(e4)
-        database.insert_move(e5)
+        database.new_game("a", Outcome.VICTORY_WHITE, "b")
+        database.play_move(e4, "c")
+        database.play_move(e5, "d")
         self.assertEqual([e4, e5], database.moves())
 
-        database.insert_game()
         board = chess.Board()
         nf3 = MoveNormal(board.push_san("Nf3"), False)
         d5 = MoveNormal(board.push_san("d5"), False)
-        database.insert_game()
-        database.insert_move(nf3)
-        database.insert_move(d5)
+        database.new_game("e", Outcome.RESIGNATION_BLACK, "f")
+        database.play_move(nf3, "g")
+        database.play_move(d5, "h")
         self.assertEqual([nf3, d5], database.moves())
 
     def test_latest_post(self) -> None:
         clear()
-        database.insert_game()
+        database.new_game("a", Outcome.DRAW, "b")
+        self.assertEqual("b", database.last_post_for_game())
         database.insert_post("asdf")
         self.assertEqual("asdf", database.last_post_for_game())
+
+        database.new_game("c", Outcome.STALEMATE, "d")
+        self.assertEqual("d", database.last_post_for_game())
         database.insert_post("arst")
         self.assertEqual("arst", database.last_post_for_game())
 
