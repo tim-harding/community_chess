@@ -1,4 +1,5 @@
-from enum import IntEnum, auto
+from chessbot.arguments import AuthMethod, parse as parse_args
+from chessbot.schedule import Schedule
 from .moves import (
     MoveError,
     MoveNormal,
@@ -22,15 +23,14 @@ from chess import (
 import chess.svg
 import chess.pgn
 
-import argparse
 import os
 import tempfile
 import asyncio
 import cairosvg
 import logging
 from asyncio import CancelledError, Queue
-from typing import NamedTuple, assert_never
-from datetime import timedelta, datetime, UTC
+from typing import assert_never
+from enum import IntEnum, auto
 
 
 class Player(IntEnum):
@@ -52,114 +52,18 @@ class NotifyPlayMove:
 MsgQueue = Queue[Comment | NotifyPlayMove]
 
 
-class ScheduleTimeout(NamedTuple):
-    seconds: int
-
-    def next_post_seconds(self) -> float:
-        return self.seconds
-
-
-class ScheduleUtc(NamedTuple):
-    posts_per_day: int
-
-    def next_post_seconds(self) -> float:
-        utc = datetime.now(UTC)
-        today = datetime.combine(utc.date(), datetime.min.time(), UTC)
-        seconds_per_post = 24 * 60 * 60 / self.posts_per_day
-        seconds_today = (utc - today).total_seconds()
-        elapsed_posts = seconds_today / seconds_per_post
-        next_post = elapsed_posts.__ceil__() * seconds_per_post
-        next_post_time = today + timedelta(seconds=next_post)
-        return (next_post_time - utc).total_seconds()
-
-
-Schedule = ScheduleTimeout | ScheduleUtc
-
-
-class AuthMethod(IntEnum):
-    PRAW = auto()
-    ENV = auto()
-
-
 class MakePostException(Exception):
     def __init__(self) -> None:
         super().__init__("Failed to make a post")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="CommunityChess Server")
-
-    parser.add_argument(
-        "-l",
-        "--log",
-        type=str,
-        choices=["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"],
-        default="WARN",
-        metavar="LEVEL",
-        help="Sets the logging verbosity level",
-    )
-
-    parser.add_argument(
-        "-t",
-        "--timeout",
-        type=int,
-        metavar="SECONDS",
-        help="Attempt to make a move every SECONDS",
-    )
-
-    parser.add_argument(
-        "-u",
-        "--utc",
-        type=int,
-        default=2,
-        metavar="TIMES",
-        help="Attempt to make a move TIMES per day, starting from UTC 00:00",
-    )
-
-    parser.add_argument(
-        "-d",
-        "--database",
-        type=str,
-        default="communitychess.db",
-        metavar="PATH",
-        help="The file to use for the sqlite database",
-    )
-
-    parser.add_argument(
-        "-a",
-        "--auth-method",
-        type=str,
-        choices=["praw", "env"],
-        default="praw",
-        metavar="METHOD",
-        help="Whether to use praw.ini or environment variables for Reddit authentication",
-    )
-
-    parser.add_argument(
-        "-s",
-        "--subreddit",
-        type=str,
-        metavar="NAME",
-        help="The subreddit to make posts in",
-    )
-
-    args = parser.parse_args()
+    args = parse_args()
     logging.basicConfig(level=args.log)
-
-    schedule: Schedule = ScheduleUtc(args.utc)
-    if args.timeout:
-        schedule = ScheduleTimeout(args.timeout)
-
-    match args.auth_method:
-        case "praw":
-            auth_method = AuthMethod.PRAW
-        case "env":
-            auth_method = AuthMethod.ENV
-        case _:
-            raise Exception("Invalid auth method")
-
     logging.info("About to run async_main")
-    asyncio.run(async_main(schedule, auth_method, args.subreddit, args.database))
+    asyncio.run(
+        async_main(args.schedule, args.auth_method, args.subreddit, args.database)
+    )
 
 
 async def async_main(
