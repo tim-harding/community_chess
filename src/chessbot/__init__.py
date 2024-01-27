@@ -248,7 +248,6 @@ async def new_game(
 async def select_move(board: Board, post: Submission) -> Move | None:
     top_score = 0
     selected = None
-    await post.load()  # type: ignore
     async for comment in post.comments:
         if comment.score <= top_score:
             continue
