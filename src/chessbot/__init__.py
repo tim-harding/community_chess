@@ -1,6 +1,8 @@
+from asyncpraw.models.reddit.message import Message
 from chessbot.arguments import AuthMethod, parse as parse_args
 from chessbot.schedule import Schedule
 from .moves import (
+    Move,
     MoveError,
     MoveNormal,
     MoveResign,
@@ -37,13 +39,6 @@ class Player(IntEnum):
     WHITE = auto()
     BLACK = auto()
 
-    def __str__(self) -> str:
-        match self:
-            case Player.WHITE:
-                return "white"
-            case Player.BLACK:
-                return "black"
-
 
 class NotifyPlayMove:
     pass
@@ -60,7 +55,6 @@ class MakePostException(Exception):
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=args.log)
-    logging.info("About to run async_main")
     asyncio.run(
         async_main(args.schedule, args.auth_method, args.subreddit, args.database)
     )
@@ -141,14 +135,17 @@ async def handle_messages(
                 logging.info(f"Responded to comment '{comment.body}' with '{reply}'")
 
 
-async def open_database(database_name: str, subreddit: Subreddit):
-    match database.open(database_name):
+async def open_database(database_name: str, subreddit: Subreddit) -> Database:
+    opened = database.open(database_name)
+    match opened:
         case Database() as db:
             return db
         case NeedsInitialPost(db):
             post = await make_post(subreddit, Board(), Outcome.ONGOING)
             db.insert_post(post.id)
             return db
+        case _:
+            assert_never(opened)
 
 
 async def forward_comments(subreddit: Subreddit, queue: MsgQueue) -> None:
@@ -279,7 +276,7 @@ def outcome_for_board(board: Board) -> Outcome:
     match outcome:
         case None:
             return Outcome.ONGOING
-        case _:
+        case chess.Outcome():
             match outcome.termination:
                 case Termination.CHECKMATE:
                     match outcome.winner:
@@ -307,7 +304,7 @@ def outcome_for_board(board: Board) -> Outcome:
                     raise Exception("Unexpected variant termination")
 
 
-async def select_move(board: Board, post: Submission) -> MoveNormal | MoveResign | None:
+async def select_move(board: Board, post: Submission) -> Move | None:
     top_score = 0
     selected = None
     await post.load()  # type: ignore
@@ -341,8 +338,6 @@ async def make_post(subreddit: Subreddit, board: Board, outcome: Outcome) -> Sub
             match comment:
                 case Comment():
                     await comment.mod.distinguish(sticky=True)
-                case _:
-                    pass
 
             return post
 
