@@ -127,7 +127,7 @@ async def open_database(args: Arguments, subreddit: Subreddit) -> Database:
         case Database() as db:
             return db
         case NeedsInitialPost(db):
-            post = await make_post(subreddit, Board(), Outcome.ONGOING)
+            post = await make_post(subreddit, Board(), Outcome.ONGOING, False)
             db.insert_post(post.id)
             return db
         case _:
@@ -197,7 +197,9 @@ async def play_move(
             match outcome:
                 case Outcome.ONGOING:
                     try:
-                        next_post = await make_post(subreddit, board, Outcome.ONGOING)
+                        next_post = await make_post(
+                            subreddit, board, Outcome.ONGOING, move.offer_draw
+                        )
                     except MakePostException:
                         logging.error(f"Failed to make post for move {move}")
                         board.pop()
@@ -238,8 +240,8 @@ async def play_move(
 async def new_game(
     subreddit: Subreddit, board: Board, outcome: Outcome, database: Database
 ) -> None:
-    final_post = await make_post(subreddit, board, outcome)
-    first_post = await make_post(subreddit, Board(), Outcome.ONGOING)
+    final_post = await make_post(subreddit, board, outcome, False)
+    first_post = await make_post(subreddit, Board(), Outcome.ONGOING, False)
     database.new_game(final_post.id, outcome, first_post.id)
 
 
@@ -260,12 +262,14 @@ async def select_move(board: Board, post: Submission) -> Move | None:
     return selected
 
 
-async def make_post(subreddit: Subreddit, board: Board, outcome: Outcome) -> Submission:
+async def make_post(
+    subreddit: Subreddit, board: Board, outcome: Outcome, draw_offer: bool
+) -> Submission:
     _, path = tempfile.mkstemp(".png")
     svg = chess.svg.board(board, size=1024)
     cairosvg.svg2png(svg, write_to=path)
 
-    title = title_for_outcome(outcome, board.ply())
+    title = title_for_outcome(outcome, board.ply(), draw_offer)
     post = await subreddit.submit_image(title, path)
     os.remove(path)
     match post:
@@ -278,12 +282,14 @@ async def make_post(subreddit: Subreddit, board: Board, outcome: Outcome) -> Sub
             assert_never(post)
 
 
-def title_for_outcome(outcome: Outcome, half_moves: int) -> str:
+def title_for_outcome(outcome: Outcome, half_moves: int, is_draw_offered: bool) -> str:
     match outcome:
         case Outcome.ONGOING:
-            return (
-                f"Move {move_number(half_moves)}, {Player.to_play(half_moves)} to play"
+            to_play = Player.to_play(half_moves)
+            draw_offer = (
+                f", {to_play.opponent()} offers a draw" if is_draw_offered else ""
             )
+            return f"Move {move_number(half_moves)}, {to_play} to play{draw_offer}"
         case Outcome.VICTORY_WHITE:
             return "White checkmate"
         case Outcome.VICTORY_BLACK:

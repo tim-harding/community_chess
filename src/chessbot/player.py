@@ -14,6 +14,13 @@ class Player(IntEnum):
             case Player.BLACK:
                 return "black"
 
+    def opponent(self) -> Player:
+        match self:
+            case Player.WHITE:
+                return Player.BLACK
+            case Player.BLACK:
+                return Player.WHITE
+
     def resignation(self) -> Outcome:
         match self:
             case Player.WHITE:
