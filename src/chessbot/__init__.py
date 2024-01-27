@@ -3,6 +3,7 @@ from chessbot.player import Player
 from chessbot.schedule import Schedule
 from .moves import (
     Move,
+    MoveDraw,
     MoveError,
     MoveNormal,
     MoveResign,
@@ -113,11 +114,15 @@ async def handle_messages(
                     break
 
             case Comment() as comment:
-                reply = reply_for_comment(comment.body, board)
+                reply = reply_for_comment(
+                    comment.body, board, was_draw_offered(database)
+                )
+
                 try:
                     await comment.reply(reply)
                 except CancelledError:
                     break
+
                 logging.info(f"Responded to comment '{comment.body}' with '{reply}'")
 
 
@@ -164,7 +169,7 @@ async def send_play_move_notifications(queue: MsgQueue, schedule: Schedule) -> N
             break
 
 
-def reply_for_comment(comment: str, board: Board) -> str:
+def reply_for_comment(comment: str, board: Board, has_draw_offer: bool) -> str:
     res = move_for_comment(comment, board)
     match res:
         case MoveNormal(move, draw_offer):
@@ -174,6 +179,11 @@ def reply_for_comment(comment: str, board: Board) -> str:
                 return f"I found the move {move} in your comment."
         case MoveResign():
             return "I found the suggestion to resign in your comment."
+        case MoveDraw():
+            if has_draw_offer:
+                return "I found the suggestion to accept a draw"
+            else:
+                return "Since the opponent hasn't offered a draw, I need you to also offer a move in case they don't accept."
         case None:
             return "I did not find a valid move in your comment. Make sure to put valid SAN or UCI notation in the first line to suggest a move."
         case MoveError():
@@ -225,6 +235,15 @@ async def play_move(
                 case Outcome.RESIGNATION_WHITE | Outcome.RESIGNATION_BLACK:
                     raise Exception("Unreachable")
 
+        case MoveDraw():
+            try:
+                await new_game(subreddit, board, Outcome.DRAW, database)
+            except MakePostException:
+                logging.error(f"Failed to make post for move {move}")
+                return
+
+            board.reset()
+
         case MoveResign():
             try:
                 await new_game(
@@ -249,11 +268,11 @@ async def select_move(board: Board, post: Submission) -> Move | None:
     top_score = 0
     selected = None
     async for comment in post.comments:
-        if comment.score <= top_score:
+        if comment.score <= top_score or comment.is_submitter:
             continue
         move = move_for_comment(comment.body, board)
         match move:
-            case MoveNormal() | MoveResign():
+            case MoveNormal() | MoveResign() | MoveDraw():
                 selected = move
                 top_score = comment.score
             case None | MoveError():
@@ -319,6 +338,11 @@ def board_pgn(board: Board) -> str:
 
 def move_number(half_moves: int) -> int:
     return half_moves // 2 + 1
+
+
+def was_draw_offered(database: Database) -> bool:
+    moves = database.moves()
+    return len(moves) > 0 and moves[-1].offer_draw
 
 
 if __name__ == "__main__":

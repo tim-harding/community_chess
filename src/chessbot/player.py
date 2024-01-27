@@ -1,18 +1,11 @@
 from __future__ import annotations
-from enum import IntEnum, auto
+from enum import StrEnum, auto
 from chessbot.outcome import Outcome
 
 
-class Player(IntEnum):
+class Player(StrEnum):
     WHITE = auto()
     BLACK = auto()
-
-    def __str__(self) -> str:
-        match self:
-            case Player.WHITE:
-                return "white"
-            case Player.BLACK:
-                return "black"
 
     def opponent(self) -> Player:
         match self:

@@ -1,5 +1,6 @@
 import unittest
 from chessbot.moves import (
+    MoveDraw,
     MoveError,
     MoveErrorKind,
     MoveResign,
@@ -63,7 +64,8 @@ class TestMoves(unittest.TestCase):
     def test_resign(self):
         self.assertEqual(move_for_comment("resign", Board()), MoveResign())
 
-    # TODO: test mate, check annotations
+    def test_bare_draw(self):
+        self.assertEqual(move_for_comment("draw", Board()), MoveDraw())
 
 
 if __name__ == "__main__":

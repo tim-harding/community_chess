@@ -16,7 +16,12 @@ class MoveResign:
         return isinstance(other, MoveResign)
 
 
-Move = MoveNormal | MoveResign
+class MoveDraw:
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, MoveDraw)
+
+
+Move = MoveNormal | MoveResign | MoveDraw
 
 
 class MoveErrorKind(StrEnum):
@@ -41,7 +46,7 @@ class MoveError(Exception):
 
 
 _MOVE_PATTERN: Final = re.compile(
-    r"^ *(?:([Rr][Ee][Ss][Ii][Gg][Nn])|(?:([Oo0](?:-[Oo0]){1,2}|[KQRBNkqrbn]?[a-h]?[1-8]?x?[a-h][1-8](?:\=[QRBNqrbn])?[+#]?)|([a-h][1-8][a-h][1-8][KQRBNkqrbn]?))( +[Dd][Rr][Aa][Ww])?)"
+    r"^ *(?:([Dd][Rr][Aa][Ww])|([Rr][Ee][Ss][Ii][Gg][Nn])|(?:([Oo0](?:-[Oo0]){1,2}|[KQRBNkqrbn]?[a-h]?[1-8]?x?[a-h][1-8](?:\=[QRBNqrbn])?[+#]?)|([a-h][1-8][a-h][1-8][KQRBNkqrbn]?))( +[Dd][Rr][Aa][Ww])?)"
 )
 
 
@@ -56,15 +61,17 @@ def move_for_comment(
             return None
         case re.Match():
             match m.groups():
-                case (str(), None, None, None):
+                case (str(), None, None, None, None):
+                    return MoveDraw()
+                case (None, str(), None, None, None):
                     return MoveResign()
-                case (None, str() as san, None, None):
+                case (None, None, str() as san, None, None):
                     return _san_move(board, san, False)
-                case (None, str() as san, None, str()):
+                case (None, None, str() as san, None, str()):
                     return _san_move(board, san, True)
-                case (None, None, str() as uci, None):
+                case (None, None, None, str() as uci, None):
                     return _uci_move(board, uci, False)
-                case (None, None, str() as uci, str()):
+                case (None, None, None, str() as uci, str()):
                     return _uci_move(board, uci, True)
                 case _:
                     raise Exception("Unexpected regex match groups")
