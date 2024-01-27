@@ -1,4 +1,3 @@
-from asyncpraw.models.reddit.message import Message
 from chessbot.arguments import AuthMethod, parse as parse_args
 from chessbot.schedule import Schedule
 from .moves import (
@@ -8,9 +7,10 @@ from .moves import (
     MoveResign,
     move_for_comment,
 )
+from chessbot.outcome import Outcome, for_move as outcome_for_move
 
 from . import database
-from .database import Database, NeedsInitialPost, Outcome
+from .database import Database, NeedsInitialPost
 
 from asyncpraw.reddit import Reddit
 from asyncpraw.models.reddit.subreddit import Subreddit
@@ -18,10 +18,7 @@ from asyncpraw.models.reddit.submission import Submission
 from asyncpraw.models.reddit.comment import Comment
 
 import chess
-from chess import (
-    Board,
-    Termination,
-)
+from chess import Board
 import chess.svg
 import chess.pgn
 
@@ -209,7 +206,7 @@ async def play_move(
 
         case MoveNormal():
             board.push(move.move)
-            outcome = outcome_for_move(move, board, database)
+            outcome = outcome_for_move(move, board, database.moves())
             match outcome:
                 case Outcome.ONGOING:
                     try:
@@ -261,47 +258,6 @@ async def new_game(
     final_post = await make_post(subreddit, board, outcome)
     first_post = await make_post(subreddit, Board(), Outcome.ONGOING)
     database.new_game(final_post.id, outcome, first_post.id)
-
-
-def outcome_for_move(move: MoveNormal, board: Board, database: Database) -> Outcome:
-    moves = database.moves()
-    if len(moves) > 0 and moves[-1].offer_draw and move.offer_draw:
-        return Outcome.DRAW
-    else:
-        return outcome_for_board(board)
-
-
-def outcome_for_board(board: Board) -> Outcome:
-    outcome = board.outcome(claim_draw=True)
-    match outcome:
-        case None:
-            return Outcome.ONGOING
-        case chess.Outcome():
-            match outcome.termination:
-                case Termination.CHECKMATE:
-                    match outcome.winner:
-                        case True:
-                            return Outcome.VICTORY_WHITE
-                        case False:
-                            return Outcome.VICTORY_BLACK
-                        case None:
-                            raise Exception("Expected a winner")
-                case Termination.STALEMATE:
-                    return Outcome.STALEMATE
-                case (
-                    Termination.INSUFFICIENT_MATERIAL
-                    | Termination.SEVENTYFIVE_MOVES
-                    | Termination.FIVEFOLD_REPETITION
-                    | Termination.FIFTY_MOVES
-                    | Termination.THREEFOLD_REPETITION
-                ):
-                    return Outcome.DRAW
-                case (
-                    Termination.VARIANT_WIN
-                    | Termination.VARIANT_LOSS
-                    | Termination.VARIANT_DRAW
-                ):
-                    raise Exception("Unexpected variant termination")
 
 
 async def select_move(board: Board, post: Submission) -> Move | None:

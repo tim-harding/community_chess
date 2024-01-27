@@ -1,21 +1,11 @@
-from enum import IntEnum, auto
 import sqlite3
 from sqlite3.dbapi2 import Connection, Cursor
+
 import os
-from typing import NamedTuple
-
 import chess
-from .moves import MoveNormal
-
-
-class Outcome(IntEnum):
-    ONGOING = auto()
-    DRAW = auto()
-    STALEMATE = auto()
-    VICTORY_WHITE = auto()
-    VICTORY_BLACK = auto()
-    RESIGNATION_WHITE = auto()
-    RESIGNATION_BLACK = auto()
+from typing import NamedTuple
+from chessbot.outcome import Outcome
+from chessbot.moves import MoveNormal
 
 
 class ResponseFormatException(Exception):
