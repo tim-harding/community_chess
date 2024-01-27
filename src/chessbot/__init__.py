@@ -238,13 +238,13 @@ async def play_move(
 
         case MoveResign():
             try:
-                await new_game(subreddit, board, resignation_for_board(board), database)
+                await new_game(subreddit, board, resignation(board.ply()), database)
             except MakePostException:
                 logging.error(f"Failed to make post for move {move}")
 
 
-def resignation_for_board(board: Board) -> Outcome:
-    player = to_play(board.ply())
+def resignation(half_moves: int) -> Outcome:
+    player = to_play(half_moves)
     match player:
         case Player.WHITE:
             return Outcome.RESIGNATION_WHITE
