@@ -46,18 +46,14 @@ class MakePostException(Exception):
 
 def main() -> None:
     args = Arguments.parse()
-    logging.basicConfig(level=args.log)
-    asyncio.run(
-        async_main(args.schedule, args.auth_method, args.subreddit, args.database)
-    )
+    logging.basicConfig(level=str(args.log).upper())
+    asyncio.run(async_main(args))
 
 
-async def async_main(
-    schedule: Schedule, auth_method: AuthMethod, subreddit_name: str, database_name: str
-) -> None:
+async def async_main(args: Arguments) -> None:
     logging.info("Entering async_main")
 
-    match auth_method:
+    match args.auth_method:
         case AuthMethod.PRAW:
             reddit = Reddit()
         case AuthMethod.ENV:
@@ -69,7 +65,7 @@ async def async_main(
             )
 
     try:
-        subreddit = await reddit.subreddit(subreddit_name)
+        subreddit = await reddit.subreddit(args.subreddit)
     except CancelledError:
         logging.info("Cancelling forward_comments")
         return
@@ -79,11 +75,9 @@ async def async_main(
     try:
         async with asyncio.TaskGroup() as group:
             tasks = [
-                group.create_task(send_play_move_notifications(queue, schedule)),
+                group.create_task(send_play_move_notifications(queue, args.schedule)),
                 group.create_task(forward_comments(subreddit, queue)),
-                group.create_task(
-                    handle_messages(reddit, subreddit, database_name, queue)
-                ),
+                group.create_task(handle_messages(reddit, subreddit, queue, args)),
             ]
     except CancelledError:
         for task in tasks:
@@ -92,13 +86,13 @@ async def async_main(
 
 
 async def handle_messages(
-    reddit: Reddit, subreddit: Subreddit, database_name: str, queue: MsgQueue
+    reddit: Reddit, subreddit: Subreddit, queue: MsgQueue, args: Arguments
 ) -> None:
     logging.info("Entered handle_messages")
     board = Board()
 
     try:
-        database = await open_database(database_name, subreddit)
+        database = await open_database(args, subreddit)
     except MakePostException:
         raise Exception("Failed to make initial post")
 
@@ -127,8 +121,8 @@ async def handle_messages(
                 logging.info(f"Responded to comment '{comment.body}' with '{reply}'")
 
 
-async def open_database(database_name: str, subreddit: Subreddit) -> Database:
-    opened = database.open(database_name)
+async def open_database(args: Arguments, subreddit: Subreddit) -> Database:
+    opened = database.open(args.database, reset=args.reset)
     match opened:
         case Database() as db:
             return db
@@ -161,14 +155,12 @@ async def send_play_move_notifications(queue: MsgQueue, schedule: Schedule) -> N
         try:
             await asyncio.sleep(seconds)
         except CancelledError:
-            logging.info("Cancelling send_play_move_notifications")
             break
 
         logging.info("Sending play move notification")
         try:
             await queue.put(NotifyPlayMove())
         except CancelledError:
-            logging.info("Cancelling send_play_move_notifications")
             break
 
 
@@ -191,7 +183,7 @@ def reply_for_comment(comment: str, board: Board) -> str:
 async def play_move(
     reddit: Reddit, subreddit: Subreddit, board: Board, database: Database
 ) -> None:
-    last_post = reddit.submission(database.previous_post())
+    last_post = await reddit.submission(database.previous_post())
     assert isinstance(last_post, Submission)
     move = await select_move(board, last_post)
     logging.info(f"Playing move {move}")
@@ -278,19 +270,10 @@ async def make_post(subreddit: Subreddit, board: Board, outcome: Outcome) -> Sub
     os.remove(path)
     match post:
         case Submission():
-            comment = await post.reply(
-                f"PGN:\n\n{board_pgn(board)}\n\nFEN:\n\n{board.fen()}"
-            )
-
-            match comment:
-                case Comment():
-                    await comment.mod.distinguish(sticky=True)
-
+            await post.reply(f"PGN:\n\n{board_pgn(board)}\n\nFEN:\n\n{board.fen()}")
             return post
-
         case None:
             raise MakePostException()
-
         case _:
             assert_never(post)
 

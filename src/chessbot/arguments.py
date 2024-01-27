@@ -24,6 +24,7 @@ class Arguments(NamedTuple):
     database: str
     auth_method: AuthMethod
     subreddit: str
+    reset: bool
 
     @staticmethod
     def parse() -> Arguments:
@@ -34,7 +35,7 @@ class Arguments(NamedTuple):
             "--log",
             type=str,
             choices=["debug", "info", "warn", "error", "critical"],
-            default="warn",
+            default="info",
             metavar="LEVEL",
             help="Sets the logging verbosity level",
         )
@@ -83,6 +84,13 @@ class Arguments(NamedTuple):
             help="The subreddit to make posts in",
         )
 
+        parser.add_argument(
+            "-r",
+            "--reset",
+            action="store_true",
+            help="Whether to completely reset the database",
+        )
+
         args = parser.parse_args()
 
         match (
@@ -92,6 +100,7 @@ class Arguments(NamedTuple):
             args.database,
             args.auth_method,
             args.subreddit,
+            args.reset,
         ):
             case (
                 str() as log,
@@ -100,6 +109,7 @@ class Arguments(NamedTuple):
                 str() as database,
                 str() as auth_method,
                 str() as subreddit,
+                bool() as reset,
             ):
                 return Arguments(
                     LogLevel(log),
@@ -107,6 +117,7 @@ class Arguments(NamedTuple):
                     database,
                     AuthMethod(auth_method),
                     subreddit,
+                    reset,
                 )
             case _:
                 raise Exception("Invalid program arguments")
