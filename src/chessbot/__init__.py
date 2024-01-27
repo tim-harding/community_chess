@@ -1,4 +1,5 @@
 from chessbot.arguments import AuthMethod, parse as parse_args
+from chessbot.player import Player
 from chessbot.schedule import Schedule
 from .moves import (
     Move,
@@ -29,12 +30,6 @@ import cairosvg
 import logging
 from asyncio import CancelledError, Queue
 from typing import assert_never
-from enum import IntEnum, auto
-
-
-class Player(IntEnum):
-    WHITE = auto()
-    BLACK = auto()
 
 
 class NotifyPlayMove:
@@ -238,18 +233,14 @@ async def play_move(
 
         case MoveResign():
             try:
-                await new_game(subreddit, board, resignation(board.ply()), database)
+                await new_game(
+                    subreddit,
+                    board,
+                    Player.to_play(board.ply()).resignation(),
+                    database,
+                )
             except MakePostException:
                 logging.error(f"Failed to make post for move {move}")
-
-
-def resignation(half_moves: int) -> Outcome:
-    player = to_play(half_moves)
-    match player:
-        case Player.WHITE:
-            return Outcome.RESIGNATION_WHITE
-        case Player.BLACK:
-            return Outcome.RESIGNATION_BLACK
 
 
 async def new_game(
@@ -307,7 +298,9 @@ async def make_post(subreddit: Subreddit, board: Board, outcome: Outcome) -> Sub
 def title_for_outcome(outcome: Outcome, half_moves: int) -> str:
     match outcome:
         case Outcome.ONGOING:
-            return f"Move {move_number(half_moves)}, {to_play(half_moves)} to play"
+            return (
+                f"Move {move_number(half_moves)}, {Player.to_play(half_moves)} to play"
+            )
         case Outcome.VICTORY_WHITE:
             return "White checkmate"
         case Outcome.VICTORY_BLACK:
@@ -338,10 +331,6 @@ def board_pgn(board: Board) -> str:
 
 def move_number(half_moves: int) -> int:
     return half_moves // 2 + 1
-
-
-def to_play(half_moves: int) -> Player:
-    return Player.WHITE if half_moves % 2 == 0 else Player.BLACK
 
 
 if __name__ == "__main__":
