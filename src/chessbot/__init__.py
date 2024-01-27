@@ -203,7 +203,7 @@ async def play_move(
                         board.pop()
                         return
 
-                    database.insert_post(next_post.id)
+                    database.play_move(move, next_post.id)
 
                 case (
                     Outcome.DRAW

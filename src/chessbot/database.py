@@ -33,6 +33,23 @@ class Database:
     def _commit(self) -> None:
         self._connection.commit()
 
+    def insert_post(self, reddit_id: str, commit: bool = True) -> None:
+        self._execute(
+            """
+            INSERT INTO post (reddit_id, game) 
+            VALUES (
+                ?, 
+                (
+                    SELECT MAX(id) 
+                    FROM game
+                )
+            )
+            """,
+            reddit_id,
+        )
+        if commit:
+            self._commit()
+
     def new_game(
         self,
         previous_game_final_post: str,
@@ -60,23 +77,6 @@ class Database:
         )
         self.insert_post(new_game_initial_post, commit=False)
         self._commit()
-
-    def insert_post(self, reddit_id: str, commit: bool = True) -> None:
-        self._execute(
-            """
-            INSERT INTO post (reddit_id, game) 
-            VALUES (
-                ?, 
-                (
-                    SELECT MAX(id) 
-                    FROM game
-                )
-            )
-            """,
-            reddit_id,
-        )
-        if commit:
-            self._commit()
 
     def previous_post(self) -> str:
         res = self._execute(

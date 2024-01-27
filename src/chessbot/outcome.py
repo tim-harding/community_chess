@@ -15,6 +15,7 @@ class Outcome(IntEnum):
 
 
 def for_move(move: MoveNormal, board: Board, moves: list[MoveNormal]) -> Outcome:
+    print(move, moves)
     return (
         Outcome.DRAW
         if len(moves) > 0 and moves[-1].offer_draw and move.offer_draw

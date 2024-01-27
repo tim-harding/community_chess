@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from enum import IntEnum, auto
+from enum import auto, StrEnum
 import re
 from typing import Any, Final, NamedTuple, assert_never
 import chess
@@ -19,16 +19,9 @@ class MoveResign:
 Move = MoveNormal | MoveResign
 
 
-class MoveErrorKind(IntEnum):
+class MoveErrorKind(StrEnum):
     AMBIGUOUS = auto()
     ILLEGAL = auto()
-
-    def __str__(self) -> str:
-        match self:
-            case MoveErrorKind.AMBIGUOUS:
-                return "ambiguous"
-            case MoveErrorKind.ILLEGAL:
-                return "ILLEGAL"
 
 
 class MoveError(Exception):
