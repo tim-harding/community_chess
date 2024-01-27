@@ -7,7 +7,7 @@ from .moves import (
 )
 
 from . import database
-from .database import NoInitialPostException, Outcome
+from .database import Database, NeedsInitialPost, Outcome
 
 from asyncpraw.reddit import Reddit
 from asyncpraw.models.reddit.subreddit import Subreddit
@@ -208,9 +208,9 @@ async def handle_messages(
     board = Board()
 
     try:
-        database.open(database_name)
-    except NoInitialPostException:
-        await make_post(subreddit, board, Outcome.ONGOING)
+        database = await open_database(database_name, subreddit)
+    except MakePostException:
+        raise Exception("Failed to make initial post")
 
     for move in database.moves():
         board.push(move.move)
@@ -224,7 +224,7 @@ async def handle_messages(
         match msg:
             case NotifyPlayMove():
                 try:
-                    await play_move(reddit, subreddit, board)
+                    await play_move(reddit, subreddit, board, database)
                 except CancelledError:
                     break
 
@@ -235,6 +235,16 @@ async def handle_messages(
                 except CancelledError:
                     break
                 logging.info(f"Responded to comment '{comment.body}' with '{reply}'")
+
+
+async def open_database(database_name: str, subreddit: Subreddit):
+    match database.open(database_name):
+        case Database() as db:
+            return db
+        case NeedsInitialPost(db):
+            post = await make_post(subreddit, Board(), Outcome.ONGOING)
+            db.insert_post(post.id)
+            return db
 
 
 async def forward_comments(subreddit: Subreddit, queue: MsgQueue) -> None:
@@ -285,8 +295,10 @@ def reply_for_comment(comment: str, board: Board) -> str:
             return f"The move {res.move_text} is {res.kind}."
 
 
-async def play_move(reddit: Reddit, subreddit: Subreddit, board: Board) -> None:
-    last_post = reddit.submission(database.last_post_for_game())
+async def play_move(
+    reddit: Reddit, subreddit: Subreddit, board: Board, database: Database
+) -> None:
+    last_post = reddit.submission(database.previous_post())
     assert isinstance(last_post, Submission)
     move = await select_move(board, last_post)
     logging.info(f"Playing move {move}")
@@ -296,7 +308,7 @@ async def play_move(reddit: Reddit, subreddit: Subreddit, board: Board) -> None:
 
         case MoveNormal():
             board.push(move.move)
-            outcome = outcome_for_move(move, board)
+            outcome = outcome_for_move(move, board, database)
             match outcome:
                 case Outcome.ONGOING:
                     try:
@@ -315,7 +327,7 @@ async def play_move(reddit: Reddit, subreddit: Subreddit, board: Board) -> None:
                     | Outcome.VICTORY_BLACK
                 ):
                     try:
-                        await new_game(subreddit, board, outcome)
+                        await new_game(subreddit, board, outcome, database)
                     except MakePostException:
                         logging.error(f"Failed to make post for move {move}")
                         board.pop()
@@ -328,7 +340,7 @@ async def play_move(reddit: Reddit, subreddit: Subreddit, board: Board) -> None:
 
         case MoveResign():
             try:
-                await new_game(subreddit, board, resignation_for_board(board))
+                await new_game(subreddit, board, resignation_for_board(board), database)
             except MakePostException:
                 logging.error(f"Failed to make post for move {move}")
 
@@ -342,13 +354,15 @@ def resignation_for_board(board: Board) -> Outcome:
             return Outcome.RESIGNATION_BLACK
 
 
-async def new_game(subreddit: Subreddit, board: Board, outcome: Outcome) -> None:
+async def new_game(
+    subreddit: Subreddit, board: Board, outcome: Outcome, database: Database
+) -> None:
     final_post = await make_post(subreddit, board, outcome)
     first_post = await make_post(subreddit, Board(), Outcome.ONGOING)
     database.new_game(final_post.id, outcome, first_post.id)
 
 
-def outcome_for_move(move: MoveNormal, board: Board) -> Outcome:
+def outcome_for_move(move: MoveNormal, board: Board, database: Database) -> Outcome:
     moves = database.moves()
     if len(moves) > 0 and moves[-1].offer_draw and move.offer_draw:
         return Outcome.DRAW
