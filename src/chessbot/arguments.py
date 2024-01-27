@@ -1,3 +1,4 @@
+from __future__ import annotations
 import argparse
 from enum import StrEnum, auto
 from typing import NamedTuple
@@ -24,94 +25,94 @@ class Arguments(NamedTuple):
     auth_method: AuthMethod
     subreddit: str
 
+    @staticmethod
+    def parse() -> Arguments:
+        parser = argparse.ArgumentParser(prog="CommunityChess Server")
 
-def parse() -> Arguments:
-    parser = argparse.ArgumentParser(prog="CommunityChess Server")
+        parser.add_argument(
+            "-l",
+            "--log",
+            type=str,
+            choices=["debug", "info", "warn", "error", "critical"],
+            default="warn",
+            metavar="LEVEL",
+            help="Sets the logging verbosity level",
+        )
 
-    parser.add_argument(
-        "-l",
-        "--log",
-        type=str,
-        choices=["debug", "info", "warn", "error", "critical"],
-        default="warn",
-        metavar="LEVEL",
-        help="Sets the logging verbosity level",
-    )
+        parser.add_argument(
+            "-t",
+            "--timeout",
+            type=int,
+            metavar="SECONDS",
+            help="Attempt to make a move every SECONDS",
+        )
 
-    parser.add_argument(
-        "-t",
-        "--timeout",
-        type=int,
-        metavar="SECONDS",
-        help="Attempt to make a move every SECONDS",
-    )
+        parser.add_argument(
+            "-u",
+            "--utc",
+            type=int,
+            metavar="TIMES",
+            help="Attempt to make a move TIMES per day, starting from UTC 00:00",
+        )
 
-    parser.add_argument(
-        "-u",
-        "--utc",
-        type=int,
-        metavar="TIMES",
-        help="Attempt to make a move TIMES per day, starting from UTC 00:00",
-    )
+        parser.add_argument(
+            "-d",
+            "--database",
+            type=str,
+            default="communitychess.db",
+            metavar="PATH",
+            help="The file to use for the sqlite database",
+        )
 
-    parser.add_argument(
-        "-d",
-        "--database",
-        type=str,
-        default="communitychess.db",
-        metavar="PATH",
-        help="The file to use for the sqlite database",
-    )
+        parser.add_argument(
+            "-a",
+            "--auth-method",
+            type=str,
+            choices=["praw", "env"],
+            default="praw",
+            metavar="METHOD",
+            help="Whether to use praw.ini or environment variables for Reddit authentication",
+        )
 
-    parser.add_argument(
-        "-a",
-        "--auth-method",
-        type=str,
-        choices=["praw", "env"],
-        default="praw",
-        metavar="METHOD",
-        help="Whether to use praw.ini or environment variables for Reddit authentication",
-    )
+        parser.add_argument(
+            "-s",
+            "--subreddit",
+            type=str,
+            required=True,
+            metavar="NAME",
+            help="The subreddit to make posts in",
+        )
 
-    parser.add_argument(
-        "-s",
-        "--subreddit",
-        type=str,
-        required=True,
-        metavar="NAME",
-        help="The subreddit to make posts in",
-    )
+        args = parser.parse_args()
 
-    args = parser.parse_args()
-
-    match (
-        args.log,
-        args.timeout,
-        args.utc,
-        args.database,
-        args.auth_method,
-        args.subreddit,
-    ):
-        case (
-            str() as log,
-            (int() | None) as timeout,
-            (int() | None) as utc,
-            str() as database,
-            str() as auth_method,
-            str() as subreddit,
+        match (
+            args.log,
+            args.timeout,
+            args.utc,
+            args.database,
+            args.auth_method,
+            args.subreddit,
         ):
-            return Arguments(
-                LogLevel(log),
-                schedule(utc, timeout),
-                database,
-                AuthMethod(auth_method),
-                subreddit,
-            )
-        case _:
-            raise Exception("Invalid program arguments")
+            case (
+                str() as log,
+                (int() | None) as timeout,
+                (int() | None) as utc,
+                str() as database,
+                str() as auth_method,
+                str() as subreddit,
+            ):
+                return Arguments(
+                    LogLevel(log),
+                    _schedule(utc, timeout),
+                    database,
+                    AuthMethod(auth_method),
+                    subreddit,
+                )
+            case _:
+                raise Exception("Invalid program arguments")
 
 
-def schedule(utc: int | None, timeout: int | None) -> Schedule:
+def _schedule(utc: int | None, timeout: int | None) -> Schedule:
     match (utc, timeout):
         case (int() as utc, None):
             return ScheduleUtc(utc)

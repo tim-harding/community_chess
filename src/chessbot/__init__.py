@@ -1,4 +1,4 @@
-from chessbot.arguments import AuthMethod, parse as parse_args
+from chessbot.arguments import Arguments, AuthMethod
 from chessbot.player import Player
 from chessbot.schedule import Schedule
 from .moves import (
@@ -45,7 +45,7 @@ class MakePostException(Exception):
 
 
 def main() -> None:
-    args = parse_args()
+    args = Arguments.parse()
     logging.basicConfig(level=args.log)
     asyncio.run(
         async_main(args.schedule, args.auth_method, args.subreddit, args.database)
